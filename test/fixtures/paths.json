@@ -1,0 +1,55 @@
+[
+  {
+    "scenario": "setup",
+    "key": "web-basics",
+    "name": "Web Security Basics",
+    "lessons": ["L1", "L2", "L3"],
+    "status": "active"
+  },
+  {
+    "scenario": "setup",
+    "key": "secure-go",
+    "name": "Secure Coding in Go",
+    "lessons": ["G1", "G2", "G3"],
+    "status": "active"
+  },
+  {
+    "scenario": "setup",
+    "key": "legacy-path",
+    "name": "Legacy Path (retired)",
+    "lessons": ["X1", "X2"],
+    "status": "retired"
+  },
+  {
+    "scenario": "S6",
+    "note": "Replaces secure-go after Frank completes G1 and G2. G3 is removed.",
+    "key": "secure-go",
+    "name": "Secure Coding in Go",
+    "lessons": ["G1", "G2"],
+    "status": "active"
+  },
+  {
+    "scenario": "S7",
+    "note": "Replaces secure-go again. G3 returns and G4 is added.",
+    "key": "secure-go",
+    "name": "Secure Coding in Go",
+    "lessons": ["G1", "G2", "G3", "G4"],
+    "status": "active"
+  },
+  {
+    "scenario": "S10",
+    "note": "Created after Ivan's Q7 completion has already been ingested.",
+    "key": "quickstart",
+    "name": "Quickstart",
+    "lessons": ["Q7", "Q8"],
+    "status": "active"
+  },
+  {
+    "scenario": "S13",
+    "note": "Retires secure-go.",
+    "key": "secure-go",
+    "name": "Secure Coding in Go",
+    "lessons": ["G1", "G2", "G3", "G4"],
+    "status": "retired"
+  }
+]

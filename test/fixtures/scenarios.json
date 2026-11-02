@@ -1,0 +1,69 @@
+{
+  "description": "Ordered steps for the scenarios in README.md. 'ingest' refers to event_ids in events.json (where an id appears more than once, use the copy tagged with this step's scenario); 'upsert_path' refers to entries in paths.json by scenario tag. 'expect' blocks are what we check. You may write a runner for this or just use it as a checklist.",
+  "steps": [
+    { "scenario": "setup", "action": "upsert_path", "paths": ["web-basics", "secure-go", "legacy-path"] },
+
+    { "scenario": "S1", "action": "ingest", "event_ids": ["evt-s1-01"] },
+    { "scenario": "S1", "action": "enroll", "ref": "alice-1", "learner_id": "alice", "path_key": "web-basics", "source": "self", "enrolled_at": "2026-03-01T08:00:00Z" },
+    { "scenario": "S1", "action": "expect", "ref": "alice-1", "lessons": { "L1": { "complete": true, "credited": true, "completed_at": "2025-11-15T09:00:00Z" }, "L2": { "complete": false }, "L3": { "complete": false } }, "completed_at": null },
+
+    { "scenario": "S2", "action": "ingest", "event_ids": ["evt-s1-01"] },
+    { "scenario": "S2", "action": "expect", "ref": "alice-1", "lessons": { "L1": { "complete": true, "credited": true, "completed_at": "2025-11-15T09:00:00Z" } }, "completed_at": null },
+
+    { "scenario": "S3", "action": "ingest", "event_ids": ["evt-s3-01", "evt-s3-02"] },
+    { "scenario": "S3", "action": "expect", "ref": "alice-1", "lessons": { "L2": { "complete": true, "credited": false, "started_at": "2026-03-04T09:00:00Z", "completed_at": "2026-03-05T14:00:00Z" } }, "completed_at": null },
+
+    { "scenario": "S4", "action": "ingest", "event_ids": ["evt-s4-01", "evt-s4-02", "evt-s4-03", "evt-s4-04"] },
+    { "scenario": "S4", "action": "enroll", "ref": "bob-1",   "learner_id": "bob",   "path_key": "web-basics", "source": "assigned", "assignment_id": "asg-100", "credit_days": 0,    "enrolled_at": "2026-03-01T08:00:00Z" },
+    { "scenario": "S4", "action": "enroll", "ref": "carol-1", "learner_id": "carol", "path_key": "web-basics", "source": "assigned", "assignment_id": "asg-100", "credit_days": 30,   "enrolled_at": "2026-03-01T08:00:00Z" },
+    { "scenario": "S4", "action": "enroll", "ref": "dave-1",  "learner_id": "dave",  "path_key": "web-basics", "source": "assigned", "assignment_id": "asg-100", "credit_days": null, "enrolled_at": "2026-03-01T08:00:00Z" },
+    { "scenario": "S4", "action": "enroll", "ref": "erin-1",  "learner_id": "erin",  "path_key": "web-basics", "source": "assigned", "assignment_id": "asg-100", "credit_days": 30,   "enrolled_at": "2026-03-01T08:00:00Z" },
+    { "scenario": "S4", "action": "expect", "ref": "bob-1",   "lessons": { "L1": { "complete": false } } },
+    { "scenario": "S4", "action": "expect", "ref": "carol-1", "lessons": { "L1": { "complete": true, "credited": true } } },
+    { "scenario": "S4", "action": "expect", "ref": "dave-1",  "lessons": { "L1": { "complete": true, "credited": true } } },
+    { "scenario": "S4", "action": "expect", "ref": "erin-1",  "lessons": { "L1": { "complete": false } } },
+
+    { "scenario": "S5", "action": "ingest", "event_ids": ["evt-s5-01", "evt-s5-02"] },
+    { "scenario": "S5", "action": "expect", "ref": "alice-1", "lessons": { "L3": { "complete": true, "started_at": "2026-03-09T11:00:00Z", "completed_at": "2026-03-10T16:00:00Z" } }, "completed_at": "2026-03-10T16:00:00Z" },
+
+    { "scenario": "S6", "action": "enroll", "ref": "frank-1", "learner_id": "frank", "path_key": "secure-go", "source": "self", "enrolled_at": "2026-03-01T08:00:00Z" },
+    { "scenario": "S6", "action": "ingest", "event_ids": ["evt-s6-01", "evt-s6-02"] },
+    { "scenario": "S6", "action": "expect", "ref": "frank-1", "completed_at": null, "lessons_complete": 2, "lessons_total": 3 },
+    { "scenario": "S6", "action": "upsert_path", "paths": ["secure-go"], "path_scenario": "S6" },
+    { "scenario": "S6", "action": "expect", "ref": "frank-1", "completed_at": "2026-03-03T10:00:00Z", "lessons_complete": 2, "lessons_total": 2 },
+
+    { "scenario": "S7", "action": "enroll", "ref": "gina-1", "learner_id": "gina", "path_key": "secure-go", "source": "self", "enrolled_at": "2026-01-10T08:00:00Z" },
+    { "scenario": "S7", "action": "enroll", "ref": "hana-1", "learner_id": "hana", "path_key": "secure-go", "source": "self", "enrolled_at": "2026-03-03T08:00:00Z" },
+    { "scenario": "S7", "action": "note", "text": "secure-go is (G1, G2) at this point because of S6. Ingest Gina's events first so she completes under (G1, G2); that completion is final. Then upsert the S7 path, then ingest Hana's events, so Hana is evaluated against four lessons." },
+    { "scenario": "S7", "action": "ingest", "event_ids": ["evt-s7-01", "evt-s7-02", "evt-s7-03"] },
+    { "scenario": "S7", "action": "expect", "ref": "gina-1", "completed_at": "2026-01-22T10:00:00Z", "lessons_total": 2 },
+    { "scenario": "S7", "action": "upsert_path", "paths": ["secure-go"], "path_scenario": "S7" },
+    { "scenario": "S7", "action": "ingest", "event_ids": ["evt-s7-04", "evt-s7-05", "evt-s7-06"] },
+    { "scenario": "S7", "action": "expect", "ref": "gina-1", "completed_at": "2026-01-22T10:00:00Z", "note": "Gina was complete under (G1, G2) and stays complete. completed_at does not move." },
+    { "scenario": "S7", "action": "expect", "ref": "hana-1", "completed_at": null, "lessons_complete": 3, "lessons_total": 4 },
+    { "scenario": "S7-variant", "action": "ingest", "event_ids": ["evt-s7-07"] },
+    { "scenario": "S7-variant", "action": "expect", "ref": "hana-1", "completed_at": "2026-03-06T10:00:00Z", "lessons_complete": 4, "lessons_total": 4, "lessons": { "G4": { "complete": true, "credited": true } } },
+
+    { "scenario": "S8", "action": "unenroll", "ref": "alice-1", "unenrolled_at": "2026-03-11T08:00:00Z" },
+    { "scenario": "S8", "action": "enroll", "ref": "alice-2", "learner_id": "alice", "path_key": "web-basics", "source": "self", "enrolled_at": "2026-03-12T08:00:00Z" },
+    { "scenario": "S8", "action": "expect_list", "learner_id": "alice", "count": 2 },
+    { "scenario": "S8", "action": "expect", "ref": "alice-1", "completed_at": "2026-03-10T16:00:00Z", "unenrolled_at": "2026-03-11T08:00:00Z" },
+    { "scenario": "S8", "action": "expect", "ref": "alice-2", "completed_at": "2026-03-12T08:00:00Z", "lessons": { "L1": { "complete": true, "credited": true }, "L2": { "complete": true, "credited": true }, "L3": { "complete": true, "credited": true } } },
+
+    { "scenario": "S9", "action": "enroll_rejected", "learner_id": "alice", "path_key": "web-basics", "source": "self", "reason": "live enrollment exists" },
+    { "scenario": "S9", "action": "enroll_rejected", "learner_id": "bob", "path_key": "legacy-path", "source": "self", "reason": "path retired" },
+
+    { "scenario": "S10", "action": "ingest", "event_ids": ["evt-s10-01"] },
+    { "scenario": "S10", "action": "upsert_path", "paths": ["quickstart"] },
+    { "scenario": "S10", "action": "enroll", "ref": "ivan-1", "learner_id": "ivan", "path_key": "quickstart", "source": "self", "enrolled_at": "2026-03-15T08:00:00Z" },
+    { "scenario": "S10", "action": "expect", "ref": "ivan-1", "lessons": { "Q7": { "complete": true, "credited": true }, "Q8": { "complete": false } }, "completed_at": null },
+
+    { "scenario": "S11", "action": "ingest", "event_ids": ["evt-s3-01"], "note": "Use the S11-tagged copy of evt-s3-01 in events.json." },
+
+    { "scenario": "S12", "action": "ingest", "event_ids": ["evt-s12-01", "evt-s12-02", "evt-s12-03"], "note": "All three in a single call." },
+
+    { "scenario": "S13", "action": "upsert_path", "paths": ["secure-go"], "path_scenario": "S13" },
+
+    { "scenario": "S14", "action": "unenroll", "ref": "gina-1", "unenrolled_at": "2026-03-20T08:00:00Z" }
+  ]
+}

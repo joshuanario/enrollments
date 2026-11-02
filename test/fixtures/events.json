@@ -1,0 +1,36 @@
+[
+  { "scenario": "S1",  "event_id": "evt-s1-01", "learner_id": "alice", "lesson_key": "L1", "type": "completed", "occurred_at": "2025-11-15T09:00:00Z" },
+
+  { "scenario": "S2",  "event_id": "evt-s1-01", "learner_id": "alice", "lesson_key": "L1", "type": "completed", "occurred_at": "2025-11-15T09:00:00Z" },
+
+  { "scenario": "S3",  "event_id": "evt-s3-01", "learner_id": "alice", "lesson_key": "L2", "type": "completed", "occurred_at": "2026-03-05T14:00:00Z" },
+  { "scenario": "S3",  "event_id": "evt-s3-02", "learner_id": "alice", "lesson_key": "L2", "type": "started",   "occurred_at": "2026-03-04T09:00:00Z" },
+
+  { "scenario": "S4",  "event_id": "evt-s4-01", "learner_id": "bob",   "lesson_key": "L1", "type": "completed", "occurred_at": "2026-02-20T12:00:00Z" },
+  { "scenario": "S4",  "event_id": "evt-s4-02", "learner_id": "carol", "lesson_key": "L1", "type": "completed", "occurred_at": "2026-02-20T12:00:00Z" },
+  { "scenario": "S4",  "event_id": "evt-s4-03", "learner_id": "dave",  "lesson_key": "L1", "type": "completed", "occurred_at": "2026-02-20T12:00:00Z" },
+  { "scenario": "S4",  "event_id": "evt-s4-04", "learner_id": "erin",  "lesson_key": "L1", "type": "completed", "occurred_at": "2024-06-01T12:00:00Z" },
+
+  { "scenario": "S5",  "event_id": "evt-s5-01", "learner_id": "alice", "lesson_key": "L3", "type": "started",   "occurred_at": "2026-03-09T11:00:00Z" },
+  { "scenario": "S5",  "event_id": "evt-s5-02", "learner_id": "alice", "lesson_key": "L3", "type": "completed", "occurred_at": "2026-03-10T16:00:00Z" },
+
+  { "scenario": "S6",  "event_id": "evt-s6-01", "learner_id": "frank", "lesson_key": "G1", "type": "completed", "occurred_at": "2026-03-02T10:00:00Z" },
+  { "scenario": "S6",  "event_id": "evt-s6-02", "learner_id": "frank", "lesson_key": "G2", "type": "completed", "occurred_at": "2026-03-03T10:00:00Z" },
+
+  { "scenario": "S7",  "event_id": "evt-s7-01", "learner_id": "gina",  "lesson_key": "G1", "type": "completed", "occurred_at": "2026-01-15T10:00:00Z" },
+  { "scenario": "S7",  "event_id": "evt-s7-02", "learner_id": "gina",  "lesson_key": "G2", "type": "completed", "occurred_at": "2026-01-22T10:00:00Z" },
+  { "scenario": "S7",  "event_id": "evt-s7-03", "learner_id": "gina",  "lesson_key": "G3", "type": "completed", "occurred_at": "2026-02-01T10:00:00Z" },
+  { "scenario": "S7",  "event_id": "evt-s7-04", "learner_id": "hana",  "lesson_key": "G1", "type": "completed", "occurred_at": "2026-03-04T10:00:00Z" },
+  { "scenario": "S7",  "event_id": "evt-s7-05", "learner_id": "hana",  "lesson_key": "G2", "type": "completed", "occurred_at": "2026-03-05T10:00:00Z" },
+  { "scenario": "S7",  "event_id": "evt-s7-06", "learner_id": "hana",  "lesson_key": "G3", "type": "completed", "occurred_at": "2026-03-06T10:00:00Z" },
+
+  { "scenario": "S7-variant", "event_id": "evt-s7-07", "learner_id": "hana", "lesson_key": "G4", "type": "completed", "occurred_at": "2025-05-05T10:00:00Z" },
+
+  { "scenario": "S10", "event_id": "evt-s10-01", "learner_id": "ivan", "lesson_key": "Q7", "type": "completed", "occurred_at": "2026-02-15T10:00:00Z" },
+
+  { "scenario": "S11", "event_id": "evt-s3-01",  "learner_id": "alice", "lesson_key": "L2", "type": "completed", "occurred_at": "2026-03-07T14:00:00Z" },
+
+  { "scenario": "S12", "event_id": "evt-s12-01", "learner_id": "ivan",  "lesson_key": "Q8", "type": "started",   "occurred_at": "2026-03-16T10:00:00Z" },
+  { "scenario": "S12", "event_id": "evt-s12-02", "learner_id": "ivan",  "lesson_key": "Q8", "type": "finished",  "occurred_at": "2026-03-16T11:00:00Z" },
+  { "scenario": "S12", "event_id": "evt-s12-03", "learner_id": "ivan",  "lesson_key": "Q8", "type": "completed", "occurred_at": "not-a-timestamp" }
+]
