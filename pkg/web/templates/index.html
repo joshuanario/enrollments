@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enrollment Manager</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --ink: #1d2330; --muted: #6b7385; --line: #e2e6ee;
+    --accent: #2563eb; --accent-ink: #ffffff; --ok: #1d7a3e; --ok-bg: #e2f5e8;
+    --warn: #8a5a00; --warn-bg: #fdf1d8; --bad: #a12626; --bad-bg: #fde6e6;
+    --player: #151a24; --player-ink: #e9edf5; --player-muted: #8a93a6; --player-line: #2a3242;
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f131a; --panel: #171c26; --ink: #e5e9f0; --muted: #949db0; --line: #283041;
+      --accent: #5b8cff; --accent-ink: #0b1020; --ok: #6fd391; --ok-bg: #173323;
+      --warn: #f0c46b; --warn-bg: #3a2d10; --bad: #ff8d8d; --bad-bg: #3d1a1a;
+      --player: #0a0d13; --player-line: #232a38;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .muted { color: var(--muted); }
+  .badge { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--line); color: var(--muted); white-space: nowrap; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad { background: var(--bad-bg); color: var(--bad); }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 5px 12px; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.danger { color: var(--bad); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .error { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+
+  /* ---------- Enrollment Manager (top, at least half the viewport) ---------- */
+  .manager {
+    position: sticky; top: 0; flex: 1 1 auto; min-height: 50vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .mgr-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .mgr-head h1 { font-size: 17px; margin: 0; }
+  .profile { display: flex; align-items: center; gap: 10px; }
+  .profile svg { width: 40px; height: 40px; flex: none; color: var(--ink); }
+  .profile .who { display: grid; gap: 2px; justify-items: end; }
+  .profile .who strong { font-size: 15px; }
+  .profile select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); max-width: 180px; }
+  .mgr-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); }
+  .pane { min-height: 0; min-width: 0; overflow: auto; padding: 16px 20px; }
+  .list-pane { border-right: 1px solid var(--line); }
+  .pane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .pane-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; }
+  .enr {
+    display: block; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px;
+  }
+  .enr:hover { border-color: var(--accent); }
+  .enr.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .enr .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .enr .meta { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
+  .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--ok); transition: width .3s; }
+  .detail h2 { margin: 0; font-size: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 16px; margin: 14px 0; }
+  .facts div { display: grid; }
+  .facts dt { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .facts dd { margin: 0; }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  section.block { margin-top: 20px; }
+  section.block h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 2px 4px 2px 10px; }
+  .chip button { border: 0; background: none; padding: 0 4px; color: var(--muted); }
+  .chip button:hover { color: var(--accent); }
+  .chip button:disabled { visibility: hidden; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .row input, .row select { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 18px 20px; width: min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgb(0 0 0 / .35); }
+  dialog h3 { margin: 0 0 12px; }
+  dialog form { display: grid; gap: 10px; }
+  dialog label { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
+  dialog input, dialog select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--bg); }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+
+  /* ---------- Scenario Player (bottom, as small as possible) ---------- */
+  .player {
+    position: sticky; bottom: 0; flex: none; background: var(--player); color: var(--player-ink);
+    border-top: 1px solid var(--player-line);
+  }
+  .transport { display: flex; align-items: center; gap: 10px; padding: 8px 14px; }
+  .pbtn {
+    width: 34px; height: 34px; border-radius: 50%; border: 0; display: grid; place-items: center;
+    background: transparent; color: var(--player-ink);
+  }
+  .pbtn:hover { background: var(--player-line); }
+  .pbtn.main { background: var(--player-ink); color: var(--player); }
+  .pbtn:disabled { opacity: .35; cursor: default; background: transparent; }
+  .pbtn svg { width: 16px; height: 16px; fill: currentColor; }
+  .player select {
+    background: var(--player-line); color: var(--player-ink); border: 0; border-radius: 6px; padding: 4px 6px;
+  }
+  .track { flex: 1; min-width: 0; display: grid; gap: 4px; }
+  .track .now { display: flex; gap: 8px; font-size: 12px; white-space: nowrap; overflow: hidden; }
+  .track .now .label { overflow: hidden; text-overflow: ellipsis; }
+  .track .now .status { margin-left: auto; color: var(--player-muted); }
+  .pbar { position: relative; height: 4px; border-radius: 2px; background: var(--player-line); overflow: hidden; }
+  .pbar > span { position: absolute; inset: 0 auto 0 0; background: var(--accent); transition: width .25s; }
+  .speed { display: flex; align-items: center; gap: 2px; font-size: 12px; color: var(--player-muted); }
+  .speed output { min-width: 22px; text-align: center; color: var(--player-ink); font-weight: 600; }
+  .speed button { width: 22px; height: 22px; border-radius: 4px; border: 0; background: var(--player-line); color: var(--player-ink); }
+  .speed button:disabled { opacity: .35; cursor: default; }
+  .playlist {
+    position: absolute; right: 12px; bottom: calc(100% + 6px); width: min(560px, calc(100vw - 24px));
+    max-height: 45vh; overflow: auto; background: var(--player); border: 1px solid var(--player-line);
+    border-radius: 10px; box-shadow: 0 12px 32px rgb(0 0 0 / .35); padding: 6px;
+  }
+  .playlist[hidden] { display: none; }
+  .tr {
+    display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; width: 100%;
+    padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--player-ink); text-align: left;
+  }
+  .tr:hover { background: var(--player-line); }
+  .tr.cur { background: var(--player-line); box-shadow: inset 3px 0 0 var(--accent); }
+  .tr .n { color: var(--player-muted); font-size: 12px; text-align: right; }
+  .tr .evs { display: grid; gap: 3px; min-width: 0; grid-column: 2 / 4; }
+  .tr .evl { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .tr .burst { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
+  .tr .burst + .evl, .tr .burst ~ .evl { padding-left: 10px; border-left: 2px solid var(--player-line); }
+  .tr .ev { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tr .ev .mono { color: var(--player-muted); }
+  .tr .res { font-size: 12px; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+  .res.ok { color: #6fd391; } .res.bad { color: #ff8d8d; } .res.mixed { color: #f0c46b; }
+
+  @media (max-width: 720px) {
+    .mgr-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .enr .top { flex-wrap: wrap; }
+    th, td { padding: 6px; }
+    .list-pane { border-right: 0; border-bottom: 1px solid var(--line); max-height: 30vh; }
+    .mgr-head { padding: 10px 16px; }
+    .pane { padding: 12px 16px; }
+    .profile .who strong { display: none; }
+    .transport { gap: 6px; padding: 6px 10px; flex-wrap: wrap; }
+    .track { order: 9; flex-basis: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<section class="manager" aria-label="Enrollment Manager">
+  <header class="mgr-head">
+    <h1>Enrollment Manager</h1>
+    <div class="profile">
+      <div class="who">
+        <strong id="learner-name">—</strong>
+        <select id="learner-select" aria-label="Switch learner"></select>
+      </div>
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path fill="currentColor" d="M20 62V49C12 45 8 37 9 27 10 13 20 4 33 4c13 0 22 9 22 21v3l4 7c1 2 0 3-2 3h-2v6c0 3-2 5-5 5h-6v13z"/></svg>
+    </div>
+  </header>
+  <div class="mgr-body">
+    <div class="pane list-pane">
+      <div class="pane-head">
+        <h2>Enrollments</h2>
+        <button class="btn primary" id="enroll-open">+ Enroll</button>
+      </div>
+      <div id="enrollments"></div>
+    </div>
+    <div class="pane detail" id="detail"></div>
+  </div>
+</section>
+
+<footer class="player" aria-label="Scenario Player">
+  <div class="playlist" id="playlist" hidden></div>
+  <div class="transport">
+    <button class="pbtn main" id="play" title="Play (space)" aria-label="Play"></button>
+    <button class="pbtn" id="stop" title="Stop" aria-label="Stop"><svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/></svg></button>
+    <button class="pbtn" id="next" title="Send next event now" aria-label="Next"><svg viewBox="0 0 16 16"><path d="M2 2.5v11l8-5.5zM11 2.5h2.5v11H11z"/></svg></button>
+    <select id="scenario" aria-label="Scenario playlist"></select>
+    <div class="track">
+      <div class="now"><span class="label" id="now-label">Loading fixtures…</span><span class="status" id="now-status"></span></div>
+      <div class="pbar"><span id="pbar" style="width:0"></span></div>
+    </div>
+    <div class="speed" title="Seconds to wait between events">
+      <button id="slower" aria-label="Decrease wait">−</button>
+      <output id="speed">2s</output>
+      <button id="faster" aria-label="Increase wait">+</button>
+    </div>
+    <button class="pbtn" id="playlist-toggle" title="Playlist" aria-label="Show playlist" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M2 3h9v1.5H2zM2 7h9v1.5H2zM2 11h6v1.5H2zM12 9v5l3.5-2.5z"/></svg></button>
+  </div>
+</footer>
+
+<dialog id="enroll-dialog">
+  <h3>Enroll <span id="enroll-learner"></span></h3>
+  <form method="dialog" id="enroll-form">
+    <label>Path <select name="path_key" required></select></label>
+    <label>Source
+      <select name="source"><option value="self">self</option><option value="assigned">assigned</option></select>
+    </label>
+    <label class="assigned-only">Assignment ID <input name="assignment_id"></label>
+    <label class="assigned-only">Credit days (blank = null) <input name="credit_days" type="number" min="0" step="1"></label>
+    <label>Enrolled at (blank = now) <input name="enrolled_at" placeholder="2026-03-01T08:00:00Z"></label>
+    <div class="error" id="enroll-error" hidden></div>
+    <div class="actions">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok">Enroll</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="unenroll-dialog">
+  <h3>Unenroll from <span id="unenroll-path"></span></h3>
+  <form method="dialog" id="unenroll-form">
+    <label>Unenrolled at (blank = now) <input name="unenrolled_at" placeholder="2026-03-11T08:00:00Z"></label>
+    <div class="error" id="unenroll-error" hidden></div>
+    <div class="actions">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok">Unenroll</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+"use strict";
+
+// ---------- helpers ----------
+const $ = (sel) => document.querySelector(sel);
+
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  return add(el, ...children);
+}
+
+// add appends children to el, skipping null/false so `cond && node` works.
+function add(el, ...children) {
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : String(c));
+  }
+  return el;
+}
+
+async function api(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 204) return null;
+  let data = null;
+  try { data = await res.json(); } catch { /* non-JSON body */ }
+  if (!res.ok) throw new Error((data && data.error) || res.status + " " + res.statusText);
+  return data;
+}
+
+const fmt = (ts) => ts ? ts.replace("T", " ").replace(/:00Z$/, "Z") : "—";
+const doneCount = (e) => (e.lessons || []).filter((l) => l.completed_at).length;
+const storage = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
+};
+
+// ---------- state ----------
+const state = {
+  learners: [],
+  learner: "",
+  enrollments: [],
+  listError: "",
+  selectedId: null,
+  detail: null,
+  detailError: "",
+  paths: [],
+  pathsError: "",
+  pathDraft: null, // { key, name, status, lessons: [] } being edited
+  pathMsg: null,
+};
+
+// ---------- learner profile ----------
+function setLearners(ids) {
+  state.learners = [...new Set(ids.filter(Boolean))];
+  renderLearnerSelect();
+}
+
+function renderLearnerSelect() {
+  const sel = $("#learner-select");
+  sel.replaceChildren(
+    ...state.learners.map((id) => h("option", { value: id, selected: id === state.learner }, id)),
+    h("option", { value: "__other" }, "Other learner…"),
+  );
+  $("#learner-name").textContent = state.learner || "—";
+}
+
+$("#learner-select").addEventListener("change", (e) => {
+  let id = e.target.value;
+  if (id === "__other") {
+    id = (prompt("Learner id") || "").trim();
+    if (!id) { renderLearnerSelect(); return; }
+    if (!state.learners.includes(id)) state.learners.push(id);
+  }
+  selectLearner(id);
+});
+
+function selectLearner(id) {
+  state.learner = id;
+  state.selectedId = null;
+  state.detail = null;
+  history.replaceState(null, "", "#learner=" + encodeURIComponent(id));
+  renderLearnerSelect();
+  refresh();
+}
+
+// ---------- data loading ----------
+async function refresh() {
+  if (!state.learner) return;
+  await Promise.all([loadEnrollments(), loadPaths()]);
+  if (state.selectedId) await loadDetail(state.selectedId);
+  render();
+}
+
+async function loadEnrollments() {
+  try {
+    state.enrollments = await api("GET", "/ui/learners/" + encodeURIComponent(state.learner) + "/enrollments");
+    state.listError = "";
+    if (!state.selectedId && state.enrollments.length) {
+      state.selectedId = state.enrollments[state.enrollments.length - 1].id;
+    }
+  } catch (err) {
+    state.enrollments = [];
+    state.listError = err.message;
+  }
+}
+
+async function loadPaths() {
+  try {
+    state.paths = await api("GET", "/ui/paths");
+    state.pathsError = "";
+  } catch (err) {
+    state.paths = [];
+    state.pathsError = err.message;
+  }
+}
+
+async function loadDetail(id) {
+  try {
+    state.detail = await api("GET", "/ui/enrollments/" + encodeURIComponent(id));
+    state.detailError = "";
+  } catch (err) {
+    state.detail = null;
+    state.detailError = err.message;
+  }
+  // Start a fresh path draft unless the user is editing this enrollment's path.
+  const pathKey = state.detail && state.detail.path_key;
+  if (!state.pathDraft || state.pathDraft.key !== pathKey || !state.pathDraft.dirty) {
+    const p = state.paths.find((p) => p.key === pathKey);
+    state.pathDraft = p ? { ...p, lessons: [...p.lessons], dirty: false } : null;
+  }
+}
+
+async function selectEnrollment(id) {
+  state.selectedId = id;
+  state.pathDraft = null;
+  state.pathMsg = null;
+  await loadDetail(id);
+  render();
+}
+
+// ---------- rendering: enrollments list ----------
+function render() {
+  renderList();
+  renderDetail();
+}
+
+function renderList() {
+  const box = $("#enrollments");
+  if (state.listError) {
+    box.replaceChildren(h("div", { class: "error" }, state.listError));
+    return;
+  }
+  if (!state.enrollments.length) {
+    box.replaceChildren(h("div", { class: "empty" }, "No enrollments for " + state.learner + "."));
+    return;
+  }
+  box.replaceChildren(...[...state.enrollments].reverse().map((e) => {
+    const total = (e.lessons || []).length, done = doneCount(e);
+    return h("button", { class: "enr" + (e.id === state.selectedId ? " sel" : ""), onclick: () => selectEnrollment(e.id) },
+      h("div", { class: "top" },
+        h("strong", {}, e.path_key),
+        statusBadge(e)),
+      h("div", { class: "meta" }, e.source + " · enrolled " + fmt(e.enrolled_at) + " · #" + e.id),
+      h("div", { class: "bar", title: done + " of " + total + " lessons" },
+        h("span", { style: "width:" + (total ? (100 * done / total) : 0) + "%" })));
+  }));
+}
+
+function statusBadge(e) {
+  if (e.completed_at && e.unenrolled_at) return h("span", { class: "badge ok" }, "complete · unenrolled");
+  if (e.completed_at) return h("span", { class: "badge ok" }, "complete");
+  if (e.unenrolled_at) return h("span", { class: "badge" }, "unenrolled");
+  return h("span", { class: "badge warn" }, "in progress");
+}
+
+// ---------- rendering: enrollment detail ----------
+function renderDetail() {
+  const box = $("#detail");
+  if (!state.selectedId) {
+    box.replaceChildren(h("div", { class: "empty" }, state.enrollments.length ? "Select an enrollment." : "Enroll the learner to get started."));
+    return;
+  }
+  if (state.detailError) {
+    box.replaceChildren(h("div", { class: "error" }, "Enrollment #" + state.selectedId + ": " + state.detailError));
+    return;
+  }
+  const e = state.detail;
+  if (!e) return;
+  const path = state.paths.find((p) => p.key === e.path_key);
+  const total = (e.lessons || []).length, done = doneCount(e);
+
+  box.replaceChildren(
+    h("h2", {}, e.path_key, path && h("span", { class: "muted", style: "font-weight:400;font-size:15px" }, path.name), statusBadge(e)),
+    h("dl", { class: "facts" },
+      fact("Enrollment", "#" + e.id),
+      fact("Source", e.source + (e.assignment_id ? " (" + e.assignment_id + ")" : "")),
+      e.source === "assigned" && fact("Credit days", e.credit_days == null ? "null" : e.credit_days),
+      fact("Enrolled at", fmt(e.enrolled_at)),
+      fact("Completed at", fmt(e.completed_at)),
+      fact("Unenrolled at", e.unenrolled_at ? fmt(e.unenrolled_at) : "live"),
+      fact("Progress", done + " / " + total)),
+    h("div", { class: "bar" }, h("span", { style: "width:" + (total ? (100 * done / total) : 0) + "%" })),
+    h("section", { class: "block" },
+      h("h3", {}, "Lesson progress"),
+      h("table", {},
+        h("thead", {}, h("tr", {}, h("th", {}, "Lesson"), h("th", {}, "Started at"), h("th", {}, "Completed at"), h("th", {}, ""))),
+        h("tbody", {}, (e.lessons || []).map((l) => h("tr", {},
+          h("td", {}, h("code", {}, l.lesson_key)),
+          h("td", {}, fmt(l.started_at)),
+          h("td", {}, l.completed_at ? fmt(l.completed_at) : h("span", { class: "muted" }, "—")),
+          h("td", {}, l.credited && h("span", { class: "badge ok" }, "credited"))))))),
+    renderPathEditor(e),
+    !e.unenrolled_at && h("section", { class: "block" },
+      h("button", { class: "btn danger", onclick: () => openUnenroll(e) }, "Unenroll " + e.learner_id)),
+  );
+}
+
+function fact(label, value) {
+  return h("div", {}, h("dt", {}, label), h("dd", {}, value));
+}
+
+function renderPathEditor(e) {
+  const d = state.pathDraft;
+  const sec = h("section", { class: "block" }, h("h3", {}, "Lesson path · " + e.path_key));
+  if (state.pathsError) return add(sec, h("div", { class: "error" }, "Paths: " + state.pathsError));
+  if (!d) return add(sec, h("div", { class: "muted" }, "Path " + e.path_key + " not found."));
+
+  const change = (fn) => { fn(); d.dirty = true; state.pathMsg = null; renderDetail(); };
+  add(sec,
+    h("div", { class: "chips" }, d.lessons.map((key, i) => h("span", { class: "chip" },
+      h("code", {}, key),
+      h("button", { title: "Move earlier", "aria-label": "Move " + key + " earlier", disabled: i === 0,
+        onclick: () => change(() => d.lessons.splice(i - 1, 0, d.lessons.splice(i, 1)[0])) }, "‹"),
+      h("button", { title: "Move later", "aria-label": "Move " + key + " later", disabled: i === d.lessons.length - 1,
+        onclick: () => change(() => d.lessons.splice(i + 1, 0, d.lessons.splice(i, 1)[0])) }, "›"),
+      h("button", { title: "Remove", "aria-label": "Remove " + key,
+        onclick: () => change(() => d.lessons.splice(i, 1)) }, "×"))),
+      !d.lessons.length && h("span", { class: "muted" }, "No lessons.")),
+  );
+
+  const input = h("input", { placeholder: "Add lesson key", size: 14, "aria-label": "New lesson key" });
+  const addLesson = () => {
+    const key = input.value.trim();
+    if (key && !d.lessons.includes(key)) change(() => d.lessons.push(key));
+  };
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") addLesson(); });
+  const status = h("select", { "aria-label": "Path status", onchange: (ev) => change(() => { d.status = ev.target.value; }) },
+    h("option", { value: "active", selected: d.status === "active" }, "active"),
+    h("option", { value: "retired", selected: d.status === "retired" }, "retired"));
+
+  add(sec,
+    h("div", { class: "row" },
+      input, h("button", { class: "btn", onclick: addLesson }, "Add"),
+      status,
+      h("button", { class: "btn primary", disabled: !d.dirty, onclick: savePath }, "Save path"),
+      d.dirty && h("button", { class: "btn", onclick: () => { state.pathDraft = null; loadDetail(e.id).then(render); } }, "Discard")),
+    state.pathMsg && h("div", { class: state.pathMsg.error ? "error" : "hint" }, state.pathMsg.text),
+    h("div", { class: "hint" }, "Saving replaces the path for every enrollment in " + e.path_key + "."),
+  );
+  return sec;
+}
+
+async function savePath() {
+  const d = state.pathDraft;
+  try {
+    await api("PUT", "/ui/paths/" + encodeURIComponent(d.key), { name: d.name, lessons: d.lessons, status: d.status });
+    state.pathDraft = null;
+    state.pathMsg = { text: "Path saved." };
+    await refresh();
+  } catch (err) {
+    state.pathMsg = { error: true, text: err.message };
+    renderDetail();
+  }
+}
+
+// ---------- enroll / unenroll dialogs ----------
+const enrollDlg = $("#enroll-dialog"), enrollForm = $("#enroll-form");
+
+function syncAssignedFields() {
+  const assigned = enrollForm.source.value === "assigned";
+  enrollForm.querySelectorAll(".assigned-only").forEach((el) => { el.hidden = !assigned; });
+}
+enrollForm.source.addEventListener("change", syncAssignedFields);
+
+$("#enroll-open").addEventListener("click", async () => {
+  if (!state.learner) return;
+  await loadPaths();
+  enrollForm.reset();
+  $("#enroll-learner").textContent = state.learner;
+  enrollForm.path_key.replaceChildren(...state.paths.map((p) =>
+    h("option", { value: p.key }, p.key + (p.status === "retired" ? " (retired)" : ""))));
+  if (!state.paths.length) enrollForm.path_key.append(h("option", { value: "" }, state.pathsError ? "paths unavailable" : "no paths"));
+  showError("#enroll-error", "");
+  syncAssignedFields();
+  enrollDlg.showModal();
+});
+
+enrollForm.addEventListener("submit", async (ev) => {
+  if (ev.submitter && ev.submitter.value === "cancel") return;
+  ev.preventDefault();
+  const f = enrollForm, assigned = f.source.value === "assigned";
+  const body = {
+    path_key: f.path_key.value,
+    source: f.source.value,
+    assignment_id: assigned ? f.assignment_id.value : "",
+    credit_days: assigned && f.credit_days.value !== "" ? Number(f.credit_days.value) : null,
+    enrolled_at: f.enrolled_at.value,
+  };
+  try {
+    const e = await api("POST", "/ui/learners/" + encodeURIComponent(state.learner) + "/enrollments", body);
+    enrollDlg.close();
+    state.selectedId = e && e.id;
+    state.pathDraft = null;
+    await refresh();
+  } catch (err) {
+    showError("#enroll-error", err.message);
+  }
+});
+
+const unenrollDlg = $("#unenroll-dialog"), unenrollForm = $("#unenroll-form");
+let unenrollTarget = null;
+
+function openUnenroll(e) {
+  unenrollTarget = e;
+  unenrollForm.reset();
+  $("#unenroll-path").textContent = e.path_key;
+  showError("#unenroll-error", "");
+  unenrollDlg.showModal();
+}
+
+unenrollForm.addEventListener("submit", async (ev) => {
+  if (ev.submitter && ev.submitter.value === "cancel") return;
+  ev.preventDefault();
+  try {
+    await api("POST", "/ui/enrollments/" + encodeURIComponent(unenrollTarget.id) + "/unenroll",
+      { unenrolled_at: unenrollForm.unenrolled_at.value });
+    unenrollDlg.close();
+    await refresh();
+  } catch (err) {
+    showError("#unenroll-error", err.message);
+  }
+});
+
+function showError(sel, msg) {
+  const el = $(sel);
+  el.textContent = msg;
+  el.hidden = !msg;
+}
+
+// ---------- Scenario Player ----------
+const ICON_PLAY = '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 16 16"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>';
+
+// Scenarios whose events are all sent as one burst: a single track, a single
+// ingest call carrying every event (S12, "mixed batch").
+const BURST_SCENARIOS = new Set(["S12"]);
+
+const player = {
+  playlists: new Map(), // scenario -> [track]; a track is { events: [event, ...] }
+  scenario: "",
+  idx: 0,               // next track to send
+  playing: false,
+  busy: false,
+  timer: null,
+  waitUntil: 0,
+  results: [],          // per track: { cls: "ok"|"bad"|"mixed", text, events: [{ ok, text }] }
+  speed: Number(storage.get("player.speed")) || 2,
+  error: "",
+};
+
+const tracks = () => player.playlists.get(player.scenario) || [];
+const eventCount = (list) => list.reduce((n, t) => n + t.events.length, 0);
+
+function buildPlaylists(events) {
+  const byScenario = new Map();
+  for (const { scenario, ...ev } of events) {
+    if (!byScenario.has(scenario)) byScenario.set(scenario, []);
+    byScenario.get(scenario).push(ev);
+  }
+  for (const [name, evs] of byScenario) {
+    player.playlists.set(name, BURST_SCENARIOS.has(name)
+      ? [{ events: evs }]
+      : evs.map((ev) => ({ events: [ev] })));
+  }
+}
+
+async function loadFixtures() {
+  try {
+    const [events, scenarios] = await Promise.all([
+      api("GET", "/ui/fixtures/events.json"),
+      api("GET", "/ui/fixtures/scenarios.json").catch(() => ({ steps: [] })),
+    ]);
+    buildPlaylists(events);
+    player.scenario = player.playlists.keys().next().value || "";
+    // Learners: everyone mentioned in events or scenario steps, in order of appearance.
+    const stepLearners = (scenarios.steps || []).map((s) => s.learner_id);
+    return [...events.map((e) => e.learner_id), ...stepLearners];
+  } catch (err) {
+    player.error = "Fixtures unavailable: " + err.message;
+    return [];
+  } finally {
+    $("#scenario").replaceChildren(...[...player.playlists.entries()].map(([name, list]) =>
+      h("option", { value: name }, name + (BURST_SCENARIOS.has(name)
+        ? " (burst of " + eventCount(list) + ")"
+        : " (" + list.length + ")"))));
+    renderPlayer();
+  }
+}
+
+function renderPlayer() {
+  const list = tracks(), n = list.length;
+  const ended = n > 0 && player.idx >= n;
+  const play = $("#play");
+  play.innerHTML = player.playing ? ICON_PAUSE : ICON_PLAY;
+  play.title = player.playing ? "Pause (space)" : (ended ? "Replay (space)" : "Play (space)");
+  play.setAttribute("aria-label", player.playing ? "Pause" : "Play");
+  play.disabled = !n;
+  $("#stop").disabled = !n || (!player.playing && player.idx === 0);
+  $("#next").disabled = !n || ended || player.busy;
+  $("#scenario").value = player.scenario;
+  $("#speed").textContent = player.speed + "s";
+  $("#slower").disabled = player.speed <= 1;
+  $("#faster").disabled = player.speed >= 5;
+  $("#pbar").style.width = (n ? 100 * Math.min(player.idx, n) / n : 0) + "%";
+
+  const label = $("#now-label"), status = $("#now-status");
+  if (player.error) {
+    label.textContent = player.error;
+    status.textContent = "";
+  } else if (!n) {
+    label.textContent = "No events";
+    status.textContent = "";
+  } else {
+    const last = player.idx > 0 ? player.results[player.idx - 1] : null;
+    const cur = list[Math.min(player.idx, n - 1)];
+    label.textContent = ended
+      ? player.scenario + " finished · " + n + " of " + n + " sent"
+      : (player.idx + 1) + "/" + n + "  " + describe(cur);
+    status.textContent = player.playing && player.waitUntil
+      ? "next in " + Math.max(0, Math.ceil((player.waitUntil - Date.now()) / 1000)) + "s"
+      : (last ? mark(last.cls) + last.text : "");
+  }
+  renderPlaylist();
+}
+
+const mark = (cls) => ({ ok: "✓ ", bad: "✕ ", mixed: "◐ " }[cls] || "");
+
+function describe(track) {
+  if (track.events.length > 1) {
+    return "burst · " + track.events.length + " events in one call (" + track.events.map((e) => e.event_id).join(", ") + ")";
+  }
+  const ev = track.events[0];
+  return ev.event_id + " · " + ev.learner_id + " · " + ev.lesson_key + " " + ev.type + " @ " + ev.occurred_at;
+}
+
+function eventLine(ev, r) {
+  return h("span", { class: "evl" },
+    h("span", { class: "ev" }, ev.learner_id + " · " + ev.lesson_key + " " + ev.type + " ",
+      h("span", { class: "mono" }, ev.event_id + " @ " + ev.occurred_at)),
+    h("span", { class: "res " + (r ? (r.ok ? "ok" : "bad") : "") }, r ? mark(r.ok ? "ok" : "bad") + r.text : ""));
+}
+
+function renderPlaylist() {
+  const box = $("#playlist");
+  if (box.hidden) return;
+  const list = tracks();
+  box.replaceChildren(...list.map((track, i) => {
+    const r = player.results[i];
+    const burst = track.events.length > 1;
+    return h("button", {
+      class: "tr" + (i === player.idx ? " cur" : ""),
+      title: "Set as next track",
+      onclick: () => { if (!player.busy) { player.idx = i; renderPlayer(); } },
+    },
+      h("span", { class: "n" }, i + 1),
+      h("span", { class: "evs" },
+        burst && h("span", { class: "burst" }, "Burst · " + track.events.length + " events in one call",
+          r && h("span", { class: "res " + r.cls }, "  " + mark(r.cls) + r.text)),
+        track.events.map((ev, k) => eventLine(ev, r && r.events[k]))));
+  }));
+  if (!list.length) box.append(h("div", { class: "empty" }, "Empty playlist"));
+}
+
+// toResult pairs the service's per-event results with the events sent:
+// by position when the counts match, otherwise by event_id.
+function toResult(events, results) {
+  results = results || [];
+  const byId = new Map(results.map((r) => [r.event_id, r]));
+  const per = events.map((ev, k) => {
+    const r = results.length === events.length ? results[k] : byId.get(ev.event_id);
+    if (!r) return { ok: false, text: "no result" };
+    return { ok: r.accepted, text: r.accepted ? "accepted" : (r.reason || "rejected") };
+  });
+  const okCount = per.filter((p) => p.ok).length;
+  if (per.length === 1) return { cls: per[0].ok ? "ok" : "bad", text: per[0].text, events: per };
+  return {
+    cls: okCount === per.length ? "ok" : okCount === 0 ? "bad" : "mixed",
+    text: okCount + " accepted · " + (per.length - okCount) + " rejected",
+    events: per,
+  };
+}
+
+// Sends track idx to the service and advances the cursor. A one-event track
+// is sent as an object; a burst is sent as an array in a single call.
+async function sendCurrent() {
+  const list = tracks();
+  if (player.busy || player.idx >= list.length) return;
+  player.busy = true;
+  const i = player.idx;
+  const { events } = list[i];
+  try {
+    const results = await api("POST", "/ui/ingest", events.length === 1 ? events[0] : events);
+    player.results[i] = toResult(events, results);
+  } catch (err) {
+    player.results[i] = { cls: "bad", text: err.message, events: events.map(() => ({ ok: false, text: err.message })) };
+  }
+  player.idx = i + 1;
+  player.busy = false;
+  renderPlayer();
+  refresh();
+}
+
+function schedule() {
+  clearTimeout(player.timer);
+  if (!player.playing) return;
+  if (player.idx >= tracks().length) {
+    player.playing = false;
+    player.waitUntil = 0;
+    renderPlayer();
+    return;
+  }
+  player.waitUntil = Date.now() + player.speed * 1000;
+  player.timer = setTimeout(async () => {
+    player.waitUntil = 0;
+    await sendCurrent();
+    schedule();
+  }, player.speed * 1000);
+  renderPlayer();
+}
+
+function play() {
+  if (!tracks().length) return;
+  if (player.idx >= tracks().length) resetPlayer();
+  player.playing = true;
+  sendCurrent().then(schedule);
+  renderPlayer();
+}
+
+function pause() {
+  player.playing = false;
+  player.waitUntil = 0;
+  clearTimeout(player.timer);
+  renderPlayer();
+}
+
+function resetPlayer() {
+  player.idx = 0;
+  player.results = [];
+}
+
+function stop() {
+  pause();
+  resetPlayer();
+  renderPlayer();
+}
+
+async function next() {
+  clearTimeout(player.timer);
+  player.waitUntil = 0;
+  await sendCurrent();
+  schedule();
+  renderPlayer();
+}
+
+$("#play").addEventListener("click", () => (player.playing ? pause() : play()));
+$("#stop").addEventListener("click", stop);
+$("#next").addEventListener("click", next);
+$("#scenario").addEventListener("change", (e) => { player.scenario = e.target.value; stop(); });
+$("#slower").addEventListener("click", () => setSpeed(player.speed - 1));
+$("#faster").addEventListener("click", () => setSpeed(player.speed + 1));
+$("#playlist-toggle").addEventListener("click", () => {
+  const box = $("#playlist");
+  box.hidden = !box.hidden;
+  $("#playlist-toggle").setAttribute("aria-expanded", String(!box.hidden));
+  renderPlaylist();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "Space" || e.target.closest("input, select, textarea, button, dialog")) return;
+  e.preventDefault();
+  player.playing ? pause() : play();
+});
+setInterval(() => { if (player.waitUntil) renderPlayer(); }, 250);
+
+function setSpeed(s) {
+  player.speed = Math.min(5, Math.max(1, s));
+  storage.set("player.speed", String(player.speed));
+  renderPlayer();
+}
+
+// ---------- boot ----------
+(async function boot() {
+  const fromHash = decodeURIComponent((location.hash.match(/learner=([^&]+)/) || [])[1] || "");
+  const learners = await loadFixtures();
+  if (fromHash) learners.unshift(fromHash);
+  setLearners(learners);
+  if (state.learners.length) selectLearner(fromHash || state.learners[0]);
+  else render();
+})();
+</script>
+</body>
+</html>
