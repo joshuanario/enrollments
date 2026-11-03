@@ -82,4 +82,7 @@ docker compose down -v           # reset the dev database (deletes all data)
 
 - `SortLessonsAsFractionalIndexing`: when lessons are added at the end, `(low + high) / 2` overflows to `+Inf`. Its `continue` branch also doesn't move `low` forward. Integer and adjacency-list ordering work.
 - The scenario tests check which lessons a path has, not their order, so ordering bugs don't fail tests.
-- S11–S13 still have `TODO(you)` assertions.
+- Open-ended scenarios:
+  - S11 asserts first write wins.
+  - S12 asserts one result per event.
+  - S13 asserts that retiring a path is allowed and that live enrollments are grandfathered (they stay live and can still complete), while rule 2 still rejects new enrollments.

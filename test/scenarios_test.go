@@ -361,15 +361,23 @@ func TestS11_RepeatedIDDifferentPayload(t *testing.T) {
 	// Act
 	results, err := sut.Ingest(ctx, events(t, "S11", "evt-s3-01"))
 
-	// Assert
+	// Assert: first write wins. The repeated event_id is rejected as a
+	// duplicate and has no effect (rule 3), even though its payload differs.
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("got %d results, want 1: %+v", len(results), results)
+	}
+	if r := results[0]; r.EventID != "evt-s3-01" || r.Accepted || r.Reason != "duplicate" {
+		t.Errorf("result = %+v, want evt-s3-01 rejected as \"duplicate\"", r)
+	}
 	after := mustGet(t, sut, ctx, alice.ID)
-	t.Logf("ingest err=%v results=%+v; L2 before=%+v after=%+v", err, results, lesson(t, before, "L2"), lesson(t, after, "L2"))
-	// TODO(you): the spec doesn't say what happens. Options:
-	//   - first write wins: err == nil, result rejected (e.g. "duplicate"),
-	//     L2 completed_at stays 2026-03-05T14:00:00Z (rule 3: no additional effect)
-	//   - last write wins: L2 completed_at becomes 2026-03-07T14:00:00Z
-	//   - conflict: result rejected with a distinct reason, payload kept for audit
-	t.Skip("TODO(you): assert the S11 outcome you choose")
+	if !reflect.DeepEqual(after, before) {
+		t.Errorf("enrollment changed after repeated event_id:\n before %+v\n after  %+v", before, after)
+	}
+	assertLessonComplete(t, after, "L2", "2026-03-05T14:00:00Z", false)
+	assertCompletedAt(t, after, "")
 }
 
 // S12, mixed batch: one call with a valid event, an unknown type and a bad timestamp.
@@ -382,15 +390,26 @@ func TestS12_MixedBatch(t *testing.T) {
 	// Act
 	results, err := sut.Ingest(ctx, batch) // a single call
 
-	// Assert
+	// Assert: per-event. Each event gets its own result; the valid one is
+	// applied and the invalid ones are rejected without affecting it.
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	want := []web.IngestResultView{
+		{EventID: "evt-s12-01", Accepted: true},
+		{EventID: "evt-s12-02", Accepted: false, Reason: "invalid type"},
+		{EventID: "evt-s12-03", Accepted: false, Reason: "invalid occurred_at"},
+	}
+	if !reflect.DeepEqual(results, want) {
+		t.Errorf("results = %+v, want %+v", results, want)
+	}
 	got := mustGet(t, sut, ctx, ivan.ID)
-	t.Logf("ingest err=%v results=%+v; Q8=%+v", err, results, lesson(t, got, "Q8"))
-	// TODO(you): the spec doesn't say what happens. Options:
-	//   - per-event: err == nil, 3 results; evt-s12-01 accepted (Q8 started_at
-	//     2026-03-16T10:00:00Z, still incomplete), evt-s12-02 and evt-s12-03
-	//     rejected with reasons (invalid type, invalid timestamp)
-	//   - all-or-nothing: err != nil (or all rejected), Q8 untouched
-	t.Skip("TODO(you): assert the S12 outcome you choose")
+	if q8 := lesson(t, got, "Q8"); q8.StartedAt != "2026-03-16T10:00:00Z" {
+		t.Errorf("Q8 started_at = %q, want 2026-03-16T10:00:00Z", q8.StartedAt)
+	}
+	assertLessonIncomplete(t, got, "Q8")
+	assertProgress(t, got, 1, 2) // Q7 was credited in S10
+	assertCompletedAt(t, got, "")
 }
 
 // S13, retire secure-go while Hana is live and incomplete.
@@ -402,15 +421,34 @@ func TestS13_RetireWithLearnersInFlight(t *testing.T) {
 	// Act
 	err := sut.UpsertPath(ctx, path(t, "S13", "secure-go")) // status retired
 
-	// Assert
+	// Assert: retiring is allowed. Hana's live enrollment is grandfathered:
+	// it stays live and incomplete, and she can still complete G4. New
+	// enrollments in secure-go are rejected (rule 2).
+	if err != nil {
+		t.Fatalf("retire secure-go: %v", err)
+	}
 	got := mustGet(t, sut, ctx, hana.ID)
-	t.Logf("upsert err=%v; hana=%+v", err, got)
-	// TODO(you): the spec doesn't say what happens. Options:
-	//   - retire allowed, Hana stays live and can still complete G4; new
-	//     enrollments in secure-go are rejected (rule 2)
-	//   - retire allowed, live enrollments are closed (unenrolled_at set)
-	//   - retire rejected while live incomplete enrollments exist
-	t.Skip("TODO(you): assert the S13 outcome you choose")
+	if got.UnenrolledAt != "" {
+		t.Errorf("hana unenrolled_at = %q, want live", got.UnenrolledAt)
+	}
+	assertProgress(t, got, 3, 4)
+	assertCompletedAt(t, got, "")
+
+	if _, err := sut.Enroll(ctx, selfEnroll("ivan", "secure-go", "2026-03-21T08:00:00Z")); err == nil {
+		t.Error("enrolling ivan in retired secure-go: want rejection, got nil")
+	}
+	if list, _ := sut.ListLearnerEnrollments(ctx, "ivan"); len(list) != 0 {
+		t.Errorf("ivan: want no enrollments after rejection, got %d", len(list))
+	}
+
+	// Hana's G4 completion still counts on the retired path.
+	mustIngest(t, sut, ctx, events(t, "S7-variant", "evt-s7-07")...)
+	got = mustGet(t, sut, ctx, hana.ID)
+	assertProgress(t, got, 4, 4)
+	assertCompletedAt(t, got, "2026-03-06T10:00:00Z")
+	if got.UnenrolledAt != "" {
+		t.Errorf("hana unenrolled_at = %q after completing, want live", got.UnenrolledAt)
+	}
 }
 
 // S14, unenroll Gina after she completed secure-go.
