@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Enrollment Manager</title>
+<title>Enrollment Viewer</title>
 <style>
   :root {
     --bg: #f4f6f9; --panel: #ffffff; --ink: #1d2330; --muted: #6b7385; --line: #e2e6ee;
@@ -43,7 +43,7 @@
   .error { background: var(--bad-bg); color: var(--bad); border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
   .empty { color: var(--muted); padding: 24px; text-align: center; }
 
-  /* ---------- Enrollment Manager (top, at least half the viewport) ---------- */
+  /* ---------- Enrollment Viewer (top, at least half the viewport) ---------- */
   .manager {
     position: sticky; top: 0; flex: 1 1 auto; min-height: 50vh;
     display: flex; flex-direction: column; overflow: hidden;
@@ -57,6 +57,9 @@
   .profile svg { width: 40px; height: 40px; flex: none; color: var(--ink); }
   .profile .who { display: grid; gap: 2px; justify-items: end; }
   .profile .who strong { font-size: 15px; }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 10px; }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+  .live.on::before { background: var(--ok); }
   .profile select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); max-width: 180px; }
   .mgr-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); }
   .pane { min-height: 0; min-width: 0; overflow: auto; padding: 16px 20px; }
@@ -84,21 +87,6 @@
   tr:last-child td { border-bottom: 0; }
   section.block { margin-top: 20px; }
   section.block h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 2px 4px 2px 10px; }
-  .chip button { border: 0; background: none; padding: 0 4px; color: var(--muted); }
-  .chip button:hover { color: var(--accent); }
-  .chip button:disabled { visibility: hidden; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-  .row input, .row select { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel); }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 18px 20px; width: min(420px, calc(100vw - 32px)); }
-  dialog::backdrop { background: rgb(0 0 0 / .35); }
-  dialog h3 { margin: 0 0 12px; }
-  dialog form { display: grid; gap: 10px; }
-  dialog label { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
-  dialog input, dialog select { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--bg); }
-  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 
   /* ---------- Scenario Player (bottom, as small as possible) ---------- */
   .player {
@@ -144,6 +132,7 @@
   .tr .evl { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
   .tr .burst { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); }
   .tr .burst + .evl, .tr .burst ~ .evl { padding-left: 10px; border-left: 2px solid var(--player-line); }
+  .tr .kind { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin-right: 6px; }
   .tr .ev { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tr .ev .mono { color: var(--player-muted); }
   .tr .res { font-size: 12px; white-space: nowrap; text-transform: none; letter-spacing: 0; }
@@ -164,9 +153,9 @@
 </head>
 <body>
 
-<section class="manager" aria-label="Enrollment Manager">
+<section class="manager" aria-label="Enrollment Viewer">
   <header class="mgr-head">
-    <h1>Enrollment Manager</h1>
+    <h1>Enrollment Viewer <span class="live" id="live" title="Live updates over websocket">connecting…</span></h1>
     <div class="profile">
       <div class="who">
         <strong id="learner-name">—</strong>
@@ -179,7 +168,6 @@
     <div class="pane list-pane">
       <div class="pane-head">
         <h2>Enrollments</h2>
-        <button class="btn primary" id="enroll-open">+ Enroll</button>
       </div>
       <div id="enrollments"></div>
     </div>
@@ -192,13 +180,13 @@
   <div class="transport">
     <button class="pbtn main" id="play" title="Play (space)" aria-label="Play"></button>
     <button class="pbtn" id="stop" title="Stop" aria-label="Stop"><svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/></svg></button>
-    <button class="pbtn" id="next" title="Send next event now" aria-label="Next"><svg viewBox="0 0 16 16"><path d="M2 2.5v11l8-5.5zM11 2.5h2.5v11H11z"/></svg></button>
+    <button class="pbtn" id="next" title="Send next track now" aria-label="Next"><svg viewBox="0 0 16 16"><path d="M2 2.5v11l8-5.5zM11 2.5h2.5v11H11z"/></svg></button>
     <select id="scenario" aria-label="Scenario playlist"></select>
     <div class="track">
       <div class="now"><span class="label" id="now-label">Loading fixtures…</span><span class="status" id="now-status"></span></div>
       <div class="pbar"><span id="pbar" style="width:0"></span></div>
     </div>
-    <div class="speed" title="Seconds to wait between events">
+    <div class="speed" title="Seconds to wait between tracks">
       <button id="slower" aria-label="Decrease wait">−</button>
       <output id="speed">2s</output>
       <button id="faster" aria-label="Increase wait">+</button>
@@ -206,36 +194,6 @@
     <button class="pbtn" id="playlist-toggle" title="Playlist" aria-label="Show playlist" aria-expanded="false"><svg viewBox="0 0 16 16"><path d="M2 3h9v1.5H2zM2 7h9v1.5H2zM2 11h6v1.5H2zM12 9v5l3.5-2.5z"/></svg></button>
   </div>
 </footer>
-
-<dialog id="enroll-dialog">
-  <h3>Enroll <span id="enroll-learner"></span></h3>
-  <form method="dialog" id="enroll-form">
-    <label>Path <select name="path_key" required></select></label>
-    <label>Source
-      <select name="source"><option value="self">self</option><option value="assigned">assigned</option></select>
-    </label>
-    <label class="assigned-only">Assignment ID <input name="assignment_id"></label>
-    <label class="assigned-only">Credit days (blank = null) <input name="credit_days" type="number" min="0" step="1"></label>
-    <label>Enrolled at (blank = now) <input name="enrolled_at" placeholder="2026-03-01T08:00:00Z"></label>
-    <div class="error" id="enroll-error" hidden></div>
-    <div class="actions">
-      <button class="btn" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn primary" value="ok">Enroll</button>
-    </div>
-  </form>
-</dialog>
-
-<dialog id="unenroll-dialog">
-  <h3>Unenroll from <span id="unenroll-path"></span></h3>
-  <form method="dialog" id="unenroll-form">
-    <label>Unenrolled at (blank = now) <input name="unenrolled_at" placeholder="2026-03-11T08:00:00Z"></label>
-    <div class="error" id="unenroll-error" hidden></div>
-    <div class="actions">
-      <button class="btn" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn primary" value="ok">Unenroll</button>
-    </div>
-  </form>
-</dialog>
 
 <script>
 "use strict";
@@ -290,12 +248,7 @@ const state = {
   enrollments: [],
   listError: "",
   selectedId: null,
-  detail: null,
-  detailError: "",
   paths: [],
-  pathsError: "",
-  pathDraft: null, // { key, name, status, lessons: [] } being edited
-  pathMsg: null,
 };
 
 // ---------- learner profile ----------
@@ -326,64 +279,88 @@ $("#learner-select").addEventListener("change", (e) => {
 function selectLearner(id) {
   state.learner = id;
   state.selectedId = null;
-  state.detail = null;
+  state.enrollments = [];
   history.replaceState(null, "", "#learner=" + encodeURIComponent(id));
   renderLearnerSelect();
-  refresh();
+  live.subscribe(id);
+  if (!live.open) refresh(); // fall back to a one-off load until the socket is up
+  else render();
+}
+
+// ---------- live updates (websocket) ----------
+// The server sends the subscribed learner's enrollments on subscribe and after
+// every change made through the UI endpoints.
+const live = {
+  ws: null,
+  open: false,
+  retry: 500,
+  subscribe(learner) {
+    if (this.open && learner) this.ws.send(JSON.stringify({ learner }));
+  },
+  connect() {
+    const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ui/ws");
+    this.ws = ws;
+    ws.onopen = () => {
+      this.open = true;
+      this.retry = 500;
+      renderLive();
+      this.subscribe(state.learner);
+    };
+    ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.learner !== state.learner) return; // a reply for a learner we've moved off
+      if (msg.type === "error") {
+        state.enrollments = [];
+        state.listError = msg.error;
+      } else {
+        setEnrollments(msg.enrollments || []);
+      }
+      render();
+    };
+    ws.onclose = () => {
+      this.open = false;
+      renderLive();
+      setTimeout(() => this.connect(), this.retry);
+      this.retry = Math.min(this.retry * 2, 10000);
+    };
+  },
+};
+
+function renderLive() {
+  const el = $("#live");
+  el.classList.toggle("on", live.open);
+  el.textContent = live.open ? "live" : "reconnecting…";
 }
 
 // ---------- data loading ----------
-async function refresh() {
-  if (!state.learner) return;
-  await Promise.all([loadEnrollments(), loadPaths()]);
-  if (state.selectedId) await loadDetail(state.selectedId);
-  render();
+function setEnrollments(list) {
+  state.enrollments = list;
+  state.listError = "";
+  if (!list.some((e) => e.id === state.selectedId)) {
+    state.selectedId = list.length ? list[list.length - 1].id : null;
+  }
 }
 
-async function loadEnrollments() {
+// refresh loads the learner's enrollments over HTTP; used only while the
+// websocket is down.
+async function refresh() {
+  if (!state.learner) return;
   try {
-    state.enrollments = await api("GET", "/ui/learners/" + encodeURIComponent(state.learner) + "/enrollments");
-    state.listError = "";
-    if (!state.selectedId && state.enrollments.length) {
-      state.selectedId = state.enrollments[state.enrollments.length - 1].id;
-    }
+    setEnrollments(await api("GET", "/ui/learners/" + encodeURIComponent(state.learner) + "/enrollments"));
   } catch (err) {
     state.enrollments = [];
     state.listError = err.message;
   }
+  render();
 }
 
 async function loadPaths() {
-  try {
-    state.paths = await api("GET", "/ui/paths");
-    state.pathsError = "";
-  } catch (err) {
-    state.paths = [];
-    state.pathsError = err.message;
-  }
+  try { state.paths = (await api("GET", "/ui/paths")) || []; } catch { state.paths = []; }
 }
 
-async function loadDetail(id) {
-  try {
-    state.detail = await api("GET", "/ui/enrollments/" + encodeURIComponent(id));
-    state.detailError = "";
-  } catch (err) {
-    state.detail = null;
-    state.detailError = err.message;
-  }
-  // Start a fresh path draft unless the user is editing this enrollment's path.
-  const pathKey = state.detail && state.detail.path_key;
-  if (!state.pathDraft || state.pathDraft.key !== pathKey || !state.pathDraft.dirty) {
-    const p = state.paths.find((p) => p.key === pathKey);
-    state.pathDraft = p ? { ...p, lessons: [...p.lessons], dirty: false } : null;
-  }
-}
-
-async function selectEnrollment(id) {
+function selectEnrollment(id) {
   state.selectedId = id;
-  state.pathDraft = null;
-  state.pathMsg = null;
-  await loadDetail(id);
   render();
 }
 
@@ -400,7 +377,7 @@ function renderList() {
     return;
   }
   if (!state.enrollments.length) {
-    box.replaceChildren(h("div", { class: "empty" }, "No enrollments for " + state.learner + "."));
+    box.replaceChildren(h("div", { class: "empty" }, state.learner ? "No enrollments for " + state.learner + "." : "Pick a learner."));
     return;
   }
   box.replaceChildren(...[...state.enrollments].reverse().map((e) => {
@@ -425,16 +402,11 @@ function statusBadge(e) {
 // ---------- rendering: enrollment detail ----------
 function renderDetail() {
   const box = $("#detail");
-  if (!state.selectedId) {
-    box.replaceChildren(h("div", { class: "empty" }, state.enrollments.length ? "Select an enrollment." : "Enroll the learner to get started."));
+  const e = state.enrollments.find((e) => e.id === state.selectedId);
+  if (!e) {
+    box.replaceChildren(h("div", { class: "empty" }, state.enrollments.length ? "Select an enrollment." : "Enrollments appear here as the Scenario Player sends them."));
     return;
   }
-  if (state.detailError) {
-    box.replaceChildren(h("div", { class: "error" }, "Enrollment #" + state.selectedId + ": " + state.detailError));
-    return;
-  }
-  const e = state.detail;
-  if (!e) return;
   const path = state.paths.find((p) => p.key === e.path_key);
   const total = (e.lessons || []).length, done = doneCount(e);
 
@@ -458,9 +430,6 @@ function renderDetail() {
           h("td", {}, fmt(l.started_at)),
           h("td", {}, l.completed_at ? fmt(l.completed_at) : h("span", { class: "muted" }, "—")),
           h("td", {}, l.credited && h("span", { class: "badge ok" }, "credited"))))))),
-    renderPathEditor(e),
-    !e.unenrolled_at && h("section", { class: "block" },
-      h("button", { class: "btn danger", onclick: () => openUnenroll(e) }, "Unenroll " + e.learner_id)),
   );
 }
 
@@ -468,178 +437,89 @@ function fact(label, value) {
   return h("div", {}, h("dt", {}, label), h("dd", {}, value));
 }
 
-function renderPathEditor(e) {
-  const d = state.pathDraft;
-  const sec = h("section", { class: "block" }, h("h3", {}, "Lesson path · " + e.path_key));
-  if (state.pathsError) return add(sec, h("div", { class: "error" }, "Paths: " + state.pathsError));
-  if (!d) return add(sec, h("div", { class: "muted" }, "Path " + e.path_key + " not found."));
-
-  const change = (fn) => { fn(); d.dirty = true; state.pathMsg = null; renderDetail(); };
-  add(sec,
-    h("div", { class: "chips" }, d.lessons.map((key, i) => h("span", { class: "chip" },
-      h("code", {}, key),
-      h("button", { title: "Move earlier", "aria-label": "Move " + key + " earlier", disabled: i === 0,
-        onclick: () => change(() => d.lessons.splice(i - 1, 0, d.lessons.splice(i, 1)[0])) }, "‹"),
-      h("button", { title: "Move later", "aria-label": "Move " + key + " later", disabled: i === d.lessons.length - 1,
-        onclick: () => change(() => d.lessons.splice(i + 1, 0, d.lessons.splice(i, 1)[0])) }, "›"),
-      h("button", { title: "Remove", "aria-label": "Remove " + key,
-        onclick: () => change(() => d.lessons.splice(i, 1)) }, "×"))),
-      !d.lessons.length && h("span", { class: "muted" }, "No lessons.")),
-  );
-
-  const input = h("input", { placeholder: "Add lesson key", size: 14, "aria-label": "New lesson key" });
-  const addLesson = () => {
-    const key = input.value.trim();
-    if (key && !d.lessons.includes(key)) change(() => d.lessons.push(key));
-  };
-  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") addLesson(); });
-  const status = h("select", { "aria-label": "Path status", onchange: (ev) => change(() => { d.status = ev.target.value; }) },
-    h("option", { value: "active", selected: d.status === "active" }, "active"),
-    h("option", { value: "retired", selected: d.status === "retired" }, "retired"));
-
-  add(sec,
-    h("div", { class: "row" },
-      input, h("button", { class: "btn", onclick: addLesson }, "Add"),
-      status,
-      h("button", { class: "btn primary", disabled: !d.dirty, onclick: savePath }, "Save path"),
-      d.dirty && h("button", { class: "btn", onclick: () => { state.pathDraft = null; loadDetail(e.id).then(render); } }, "Discard")),
-    state.pathMsg && h("div", { class: state.pathMsg.error ? "error" : "hint" }, state.pathMsg.text),
-    h("div", { class: "hint" }, "Saving replaces the path for every enrollment in " + e.path_key + "."),
-  );
-  return sec;
-}
-
-async function savePath() {
-  const d = state.pathDraft;
-  try {
-    await api("PUT", "/ui/paths/" + encodeURIComponent(d.key), { name: d.name, lessons: d.lessons, status: d.status });
-    state.pathDraft = null;
-    state.pathMsg = { text: "Path saved." };
-    await refresh();
-  } catch (err) {
-    state.pathMsg = { error: true, text: err.message };
-    renderDetail();
-  }
-}
-
-// ---------- enroll / unenroll dialogs ----------
-const enrollDlg = $("#enroll-dialog"), enrollForm = $("#enroll-form");
-
-function syncAssignedFields() {
-  const assigned = enrollForm.source.value === "assigned";
-  enrollForm.querySelectorAll(".assigned-only").forEach((el) => { el.hidden = !assigned; });
-}
-enrollForm.source.addEventListener("change", syncAssignedFields);
-
-$("#enroll-open").addEventListener("click", async () => {
-  if (!state.learner) return;
-  await loadPaths();
-  enrollForm.reset();
-  $("#enroll-learner").textContent = state.learner;
-  enrollForm.path_key.replaceChildren(...state.paths.map((p) =>
-    h("option", { value: p.key }, p.key + (p.status === "retired" ? " (retired)" : ""))));
-  if (!state.paths.length) enrollForm.path_key.append(h("option", { value: "" }, state.pathsError ? "paths unavailable" : "no paths"));
-  showError("#enroll-error", "");
-  syncAssignedFields();
-  enrollDlg.showModal();
-});
-
-enrollForm.addEventListener("submit", async (ev) => {
-  if (ev.submitter && ev.submitter.value === "cancel") return;
-  ev.preventDefault();
-  const f = enrollForm, assigned = f.source.value === "assigned";
-  const body = {
-    path_key: f.path_key.value,
-    source: f.source.value,
-    assignment_id: assigned ? f.assignment_id.value : "",
-    credit_days: assigned && f.credit_days.value !== "" ? Number(f.credit_days.value) : null,
-    enrolled_at: f.enrolled_at.value,
-  };
-  try {
-    const e = await api("POST", "/ui/learners/" + encodeURIComponent(state.learner) + "/enrollments", body);
-    enrollDlg.close();
-    state.selectedId = e && e.id;
-    state.pathDraft = null;
-    await refresh();
-  } catch (err) {
-    showError("#enroll-error", err.message);
-  }
-});
-
-const unenrollDlg = $("#unenroll-dialog"), unenrollForm = $("#unenroll-form");
-let unenrollTarget = null;
-
-function openUnenroll(e) {
-  unenrollTarget = e;
-  unenrollForm.reset();
-  $("#unenroll-path").textContent = e.path_key;
-  showError("#unenroll-error", "");
-  unenrollDlg.showModal();
-}
-
-unenrollForm.addEventListener("submit", async (ev) => {
-  if (ev.submitter && ev.submitter.value === "cancel") return;
-  ev.preventDefault();
-  try {
-    await api("POST", "/ui/enrollments/" + encodeURIComponent(unenrollTarget.id) + "/unenroll",
-      { unenrolled_at: unenrollForm.unenrolled_at.value });
-    unenrollDlg.close();
-    await refresh();
-  } catch (err) {
-    showError("#unenroll-error", err.message);
-  }
-});
-
-function showError(sel, msg) {
-  const el = $(sel);
-  el.textContent = msg;
-  el.hidden = !msg;
-}
-
 // ---------- Scenario Player ----------
 const ICON_PLAY = '<svg viewBox="0 0 16 16"><path d="M4 2.5v11l9-5.5z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 16 16"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg>';
 
-// Scenarios whose events are all sent as one burst: a single track, a single
-// ingest call carrying every event (S12, "mixed batch").
+// Scenarios whose ingest steps send all their events as one burst: a single
+// track, a single ingest call carrying every event (S12, "mixed batch").
 const BURST_SCENARIOS = new Set(["S12"]);
 
+// Step actions that are checks or comments, not something sent to the service.
+const SKIPPED_ACTIONS = new Set(["note", "expect", "expect_list"]);
+
 const player = {
-  playlists: new Map(), // scenario -> [track]; a track is { events: [event, ...] }
+  playlists: new Map(), // scenario -> [track]
   scenario: "",
   idx: 0,               // next track to send
   playing: false,
   busy: false,
   timer: null,
   waitUntil: 0,
-  results: [],          // per track: { cls: "ok"|"bad"|"mixed", text, events: [{ ok, text }] }
+  results: [],          // per track: { cls: "ok"|"bad"|"mixed", text, events?: [{ ok, text }] }
+  refs: new Map(),      // enrollment ref (e.g. "alice-1") -> { learner_id, path_key } from enroll steps
+  refIds: new Map(),    // enrollment ref -> id returned when this page enrolled it
   speed: Number(storage.get("player.speed")) || 2,
   error: "",
 };
 
 const tracks = () => player.playlists.get(player.scenario) || [];
-const eventCount = (list) => list.reduce((n, t) => n + t.events.length, 0);
 
-function buildPlaylists(events) {
-  const byScenario = new Map();
-  for (const { scenario, ...ev } of events) {
-    if (!byScenario.has(scenario)) byScenario.set(scenario, []);
-    byScenario.get(scenario).push(ev);
+// A track is one call to the service:
+//   { kind: "ingest", events: [event, ...] }   (more than one event = burst)
+//   { kind: "enroll", step, expectReject }
+//   { kind: "unenroll", step }
+//   { kind: "upsert_path", path }
+function buildPlaylists(events, steps, paths) {
+  // events.json may hold several copies of an event_id; use the one tagged
+  // with the step's scenario, else the first.
+  const eventFor = (id, scenario) =>
+    events.find((e) => e.event_id === id && e.scenario === scenario) || events.find((e) => e.event_id === id);
+  // paths.json entries are tagged by scenario; a step names the tag with
+  // path_scenario, else its own scenario, else "setup".
+  const pathFor = (key, tag) =>
+    paths.find((p) => p.key === key && p.scenario === tag) || paths.find((p) => p.key === key && p.scenario === "setup");
+  const strip = ({ scenario, note, ...rest }) => rest;
+
+  for (const step of steps) {
+    if (step.action === "enroll" && step.ref) player.refs.set(step.ref, { learner_id: step.learner_id, path_key: step.path_key });
   }
-  for (const [name, evs] of byScenario) {
-    player.playlists.set(name, BURST_SCENARIOS.has(name)
-      ? [{ events: evs }]
-      : evs.map((ev) => ({ events: [ev] })));
+  for (const step of steps) {
+    if (SKIPPED_ACTIONS.has(step.action)) continue;
+    if (!player.playlists.has(step.scenario)) player.playlists.set(step.scenario, []);
+    const list = player.playlists.get(step.scenario);
+    switch (step.action) {
+      case "ingest": {
+        const evs = (step.event_ids || []).map((id) => eventFor(id, step.scenario)).filter(Boolean).map(strip);
+        if (BURST_SCENARIOS.has(step.scenario)) list.push({ kind: "ingest", events: evs });
+        else evs.forEach((ev) => list.push({ kind: "ingest", events: [ev] }));
+        break;
+      }
+      case "enroll":
+      case "enroll_rejected":
+        list.push({ kind: "enroll", step, expectReject: step.action === "enroll_rejected" });
+        break;
+      case "unenroll":
+        list.push({ kind: "unenroll", step });
+        break;
+      case "upsert_path":
+        for (const key of step.paths || []) {
+          const p = pathFor(key, step.path_scenario || step.scenario);
+          if (p) list.push({ kind: "upsert_path", path: strip(p) });
+        }
+        break;
+    }
   }
 }
 
 async function loadFixtures() {
   try {
-    const [events, scenarios] = await Promise.all([
+    const [events, scenarios, paths] = await Promise.all([
       api("GET", "/ui/fixtures/events.json"),
-      api("GET", "/ui/fixtures/scenarios.json").catch(() => ({ steps: [] })),
+      api("GET", "/ui/fixtures/scenarios.json"),
+      api("GET", "/ui/fixtures/paths.json"),
     ]);
-    buildPlaylists(events);
+    buildPlaylists(events, scenarios.steps || [], paths);
     player.scenario = player.playlists.keys().next().value || "";
     // Learners: everyone mentioned in events or scenario steps, in order of appearance.
     const stepLearners = (scenarios.steps || []).map((s) => s.learner_id);
@@ -649,9 +529,7 @@ async function loadFixtures() {
     return [];
   } finally {
     $("#scenario").replaceChildren(...[...player.playlists.entries()].map(([name, list]) =>
-      h("option", { value: name }, name + (BURST_SCENARIOS.has(name)
-        ? " (burst of " + eventCount(list) + ")"
-        : " (" + list.length + ")"))));
+      h("option", { value: name }, name + " (" + list.length + ")")));
     renderPlayer();
   }
 }
@@ -677,7 +555,7 @@ function renderPlayer() {
     label.textContent = player.error;
     status.textContent = "";
   } else if (!n) {
-    label.textContent = "No events";
+    label.textContent = "No tracks";
     status.textContent = "";
   } else {
     const last = player.idx > 0 ? player.results[player.idx - 1] : null;
@@ -694,12 +572,30 @@ function renderPlayer() {
 
 const mark = (cls) => ({ ok: "✓ ", bad: "✕ ", mixed: "◐ " }[cls] || "");
 
+const describeEvent = (ev) => ev.event_id + " · " + ev.learner_id + " · " + ev.lesson_key + " " + ev.type + " @ " + ev.occurred_at;
+
+function describeAction(track) {
+  const s = track.step;
+  switch (track.kind) {
+    case "enroll":
+      return s.learner_id + " in " + s.path_key + " · " + s.source
+        + (s.assignment_id ? " (" + s.assignment_id + ", credit_days " + (s.credit_days == null ? "null" : s.credit_days) + ")" : "")
+        + (s.enrolled_at ? " @ " + s.enrolled_at : "")
+        + (track.expectReject ? " · expect rejected: " + s.reason : "");
+    case "unenroll":
+      return s.ref + " @ " + (s.unenrolled_at || "now");
+    case "upsert_path":
+      return track.path.key + " (" + track.path.lessons.join(", ") + ") · " + track.path.status;
+  }
+  return "";
+}
+
 function describe(track) {
+  if (track.kind !== "ingest") return track.kind.replace("_", " ") + " · " + describeAction(track);
   if (track.events.length > 1) {
     return "burst · " + track.events.length + " events in one call (" + track.events.map((e) => e.event_id).join(", ") + ")";
   }
-  const ev = track.events[0];
-  return ev.event_id + " · " + ev.learner_id + " · " + ev.lesson_key + " " + ev.type + " @ " + ev.occurred_at;
+  return describeEvent(track.events[0]);
 }
 
 function eventLine(ev, r) {
@@ -709,13 +605,19 @@ function eventLine(ev, r) {
     h("span", { class: "res " + (r ? (r.ok ? "ok" : "bad") : "") }, r ? mark(r.ok ? "ok" : "bad") + r.text : ""));
 }
 
+function actionLine(track, r) {
+  return h("span", { class: "evl" },
+    h("span", { class: "ev" }, h("span", { class: "kind" }, track.kind.replace("_", " ")), describeAction(track)),
+    h("span", { class: "res " + (r ? r.cls : "") }, r ? mark(r.cls) + r.text : ""));
+}
+
 function renderPlaylist() {
   const box = $("#playlist");
   if (box.hidden) return;
   const list = tracks();
   box.replaceChildren(...list.map((track, i) => {
     const r = player.results[i];
-    const burst = track.events.length > 1;
+    const burst = track.kind === "ingest" && track.events.length > 1;
     return h("button", {
       class: "tr" + (i === player.idx ? " cur" : ""),
       title: "Set as next track",
@@ -723,9 +625,13 @@ function renderPlaylist() {
     },
       h("span", { class: "n" }, i + 1),
       h("span", { class: "evs" },
-        burst && h("span", { class: "burst" }, "Burst · " + track.events.length + " events in one call",
-          r && h("span", { class: "res " + r.cls }, "  " + mark(r.cls) + r.text)),
-        track.events.map((ev, k) => eventLine(ev, r && r.events[k]))));
+        track.kind !== "ingest"
+          ? actionLine(track, r)
+          : [
+            burst && h("span", { class: "burst" }, "Burst · " + track.events.length + " events in one call",
+              r && h("span", { class: "res " + r.cls }, "  " + mark(r.cls) + r.text)),
+            track.events.map((ev, k) => eventLine(ev, r && r.events && r.events[k])),
+          ]));
   }));
   if (!list.length) box.append(h("div", { class: "empty" }, "Empty playlist"));
 }
@@ -749,24 +655,78 @@ function toResult(events, results) {
   };
 }
 
-// Sends track idx to the service and advances the cursor. A one-event track
-// is sent as an object; a burst is sent as an array in a single call.
+// enrollmentIdFor finds the enrollment an unenroll step's ref names: the id
+// this page got when it enrolled it, else the learner's live enrollment in
+// that path.
+async function enrollmentIdFor(ref) {
+  if (player.refIds.has(ref)) return player.refIds.get(ref);
+  const target = player.refs.get(ref);
+  if (!target) throw new Error("unknown enrollment ref " + ref);
+  const list = await api("GET", "/ui/learners/" + encodeURIComponent(target.learner_id) + "/enrollments");
+  const e = [...list].reverse().find((e) => e.path_key === target.path_key && !e.unenrolled_at);
+  if (!e) throw new Error("no live enrollment of " + target.learner_id + " in " + target.path_key);
+  return e.id;
+}
+
+// send makes the track's call to the service and returns its result.
+async function send(track) {
+  switch (track.kind) {
+    case "ingest": {
+      const evs = track.events;
+      return toResult(evs, await api("POST", "/ui/ingest", evs.length === 1 ? evs[0] : evs));
+    }
+    case "enroll": {
+      const s = track.step;
+      try {
+        const e = await api("POST", "/ui/learners/" + encodeURIComponent(s.learner_id) + "/enrollments", {
+          path_key: s.path_key, source: s.source, assignment_id: s.assignment_id || "",
+          credit_days: s.credit_days == null ? null : s.credit_days, enrolled_at: s.enrolled_at || "",
+        });
+        if (s.ref && e) player.refIds.set(s.ref, e.id);
+        return track.expectReject
+          ? { cls: "bad", text: "accepted, expected rejection" }
+          : { cls: "ok", text: "enrolled #" + (e && e.id) };
+      } catch (err) {
+        return track.expectReject
+          ? { cls: "ok", text: "rejected: " + err.message }
+          : { cls: "bad", text: err.message };
+      }
+    }
+    case "unenroll": {
+      const s = track.step;
+      const id = await enrollmentIdFor(s.ref);
+      await api("POST", "/ui/enrollments/" + encodeURIComponent(id) + "/unenroll", { unenrolled_at: s.unenrolled_at || "" });
+      return { cls: "ok", text: "unenrolled #" + id };
+    }
+    case "upsert_path": {
+      const p = track.path;
+      await api("POST", "/ui/paths/" + encodeURIComponent(p.key), { name: p.name, lessons: p.lessons, status: p.status });
+      return { cls: "ok", text: "saved" };
+    }
+  }
+  return { cls: "bad", text: "unknown track" };
+}
+
+// Sends track idx to the service and advances the cursor.
 async function sendCurrent() {
   const list = tracks();
   if (player.busy || player.idx >= list.length) return;
   player.busy = true;
   const i = player.idx;
-  const { events } = list[i];
+  const track = list[i];
   try {
-    const results = await api("POST", "/ui/ingest", events.length === 1 ? events[0] : events);
-    player.results[i] = toResult(events, results);
+    player.results[i] = await send(track);
   } catch (err) {
-    player.results[i] = { cls: "bad", text: err.message, events: events.map(() => ({ ok: false, text: err.message })) };
+    player.results[i] = {
+      cls: "bad", text: err.message,
+      events: track.events && track.events.map(() => ({ ok: false, text: err.message })),
+    };
   }
   player.idx = i + 1;
   player.busy = false;
   renderPlayer();
-  refresh();
+  if (track.kind === "upsert_path") loadPaths().then(render);
+  if (!live.open) refresh(); // the websocket pushes the change when it's up
 }
 
 function schedule() {
@@ -834,7 +794,7 @@ $("#playlist-toggle").addEventListener("click", () => {
   renderPlaylist();
 });
 document.addEventListener("keydown", (e) => {
-  if (e.code !== "Space" || e.target.closest("input, select, textarea, button, dialog")) return;
+  if (e.code !== "Space" || e.target.closest("input, select, textarea, button")) return;
   e.preventDefault();
   player.playing ? pause() : play();
 });
@@ -849,7 +809,9 @@ function setSpeed(s) {
 // ---------- boot ----------
 (async function boot() {
   const fromHash = decodeURIComponent((location.hash.match(/learner=([^&]+)/) || [])[1] || "");
-  const learners = await loadFixtures();
+  live.connect();
+  renderLive();
+  const [learners] = await Promise.all([loadFixtures(), loadPaths()]);
   if (fromHash) learners.unshift(fromHash);
   setLearners(learners);
   if (state.learners.length) selectLearner(fromHash || state.learners[0]);

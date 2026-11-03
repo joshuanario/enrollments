@@ -19,6 +19,8 @@ func main() {
 	log.Println("Work by Joshua Nario.  See ASSIGNMENT.MD")
 	var wait time.Duration
 	flag.DurationVar(&wait, "graceful-timeout", time.Second*15, "the duration for which the server gracefully wait for existing connections to finish - e.g. 15s or 1m")
+	var sortingFlag int
+	flag.IntVar(&sortingFlag, "sorting", 0, "the sorting method for lessons (0 = fractional-indexing, 1 = integer-position, 2 = adjacency-list)")
 	flag.Parse()
 	var ctx = context.Background()
 	dsn := os.Getenv("DATABASE_URL")
@@ -31,7 +33,22 @@ func main() {
 	}
 	defer db.Close()
 	log.Println("connected to postgres, schema migrated")
-	srv := setupServer(ctx, db)
+	ss := operations.SortingStrategy(sortingFlag)
+	switch ss {
+	case operations.FractionalIndexing, operations.IntegerPositionColumn, operations.AdjacencyList:
+	default:
+		panic("invalid sorting method")
+	}
+	if os.Getenv("SEED_SETUP") == "true" {
+		fixtures := os.Getenv("FIXTURES_DIR")
+		if fixtures == "" {
+			fixtures = "test/fixtures"
+		}
+		if err := seedSetupPaths(ctx, db, operations.NewOperationsService(db, &ss), fixtures); err != nil {
+			log.Fatal(err)
+		}
+	}
+	srv := setupServer(db, &ss)
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			log.Println(err)
@@ -40,15 +57,15 @@ func main() {
 	listenForShutdown(ctx, wait, srv)
 }
 
-func setupServer(ctx context.Context, db *store.Store) *http.Server {
+func setupServer(db *store.Store, ss *operations.SortingStrategy) *http.Server {
 
-	log.Println("enrollments<-0.0.0.0:8080")
+	log.Println("enrollments is running on http://localhost:8080")
 	return &http.Server{
 		Addr:         "0.0.0.0:8080",
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
-		Handler:      NewRouter(db),
+		Handler:      NewRouter(db, ss),
 	}
 }
 
@@ -65,25 +82,10 @@ func listenForShutdown(ctx context.Context, grace time.Duration, srv *http.Serve
 	os.Exit(0)
 }
 
-func NewRouter(db *store.Store) http.Handler {
+func NewRouter(db *store.Store, ss *operations.SortingStrategy) http.Handler {
 	r := mux.NewRouter()
+	svc := operations.NewOperationsService(db, ss)
+	web.Register(r, svc)
 
-	// TODO(you): JSON API routes go here, e.g. r.PathPrefix("/api").Subrouter().
-
-	// TODO(you): replace NotImplemented with your service (built on db).
-	_ = db
-	web.Register(r, operations.OperationsService{})
-
-	// foldersRoute := r.PathPrefix("/folders").Subrouter()
-	// foldersRoute.HandleFunc("/{id}", Catalog()).Methods("GET")
-	// projectIDRoute := foldersRoute.PathPrefix("/{id}").Subrouter()
-	// projectIDRoute.HandleFunc("/facts", Expressable()).Methods("GET")
-	// projectIDRoute.HandleFunc("/{hash}", Renderable()).Methods("GET")
-	// wd, err := os.Getwd()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// conceptnetworkbrowser := http.FileServer(http.Dir((filepath.Join(wd, "goldlord-midas"))))
-	// r.PathPrefix("/").Handler(http.StripPrefix("/", conceptnetworkbrowser))
 	return r
 }

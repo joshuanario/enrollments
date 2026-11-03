@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,8 +30,19 @@ type Store struct {
 //
 // Postgres connections are retried while the server is still starting.
 func Open(ctx context.Context, dsn string) (*Store, error) {
+	// Store methods already turn "record not found" into ErrNotFound, so it
+	// isn't worth a log line.
+	return open(ctx, dsn, logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  logger.Warn,
+		IgnoreRecordNotFoundError: true,
+		Colorful:                  true,
+	}))
+}
+
+func open(ctx context.Context, dsn string, l logger.Interface) (*Store, error) {
 	cfg := &gorm.Config{
-		Logger:  logger.Default.LogMode(logger.Warn),
+		Logger:  l,
 		NowFunc: func() time.Time { return time.Now().UTC() },
 		// Driver-neutral errors, e.g. a unique violation is gorm.ErrDuplicatedKey
 		// on both Postgres and SQLite.
@@ -63,10 +75,12 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 var memoryDBs atomic.Int64
 
 // OpenInMemory opens a new, private in-memory SQLite database. Each call gets
-// its own empty database, which disappears when the Store is closed.
+// its own empty database, which disappears when the Store is closed. GORM's
+// logging is off, since tests expect errors such as duplicate keys; the
+// errors are still returned.
 func OpenInMemory(ctx context.Context) (*Store, error) {
 	name := fmt.Sprintf("enrollments-%d", memoryDBs.Add(1))
-	return Open(ctx, "sqlite:file:"+name+"?mode=memory&cache=shared")
+	return open(ctx, "sqlite:file:"+name+"?mode=memory&cache=shared", logger.Discard)
 }
 
 func openPostgres(ctx context.Context, dsn string, cfg *gorm.Config) (*gorm.DB, error) {
@@ -130,7 +144,7 @@ func openSQLite(dsn string, cfg *gorm.Config) (*gorm.DB, error) {
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
-	return s.db.WithContext(ctx).AutoMigrate(&PathRow{}, &PathLessonRow{}, &LessonRow{}, &EnrollmentRow{}, &EventRow{})
+	return s.db.WithContext(ctx).AutoMigrate(&PathRow{}, &LessonRow{}, &EnrollmentRow{}, &EventRow{})
 }
 
 // Tx runs fn inside a single database transaction. The *Store passed to fn is

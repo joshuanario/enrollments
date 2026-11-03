@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -13,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/joshuanario/enrollments/pkg/enrollments"
 )
 
 //go:embed templates/*.html
@@ -27,8 +25,12 @@ var index = template.Must(template.ParseFS(templateFS, "templates/index.html"))
 //
 // Fixture files (events.json, scenarios.json, paths.json) for the scenario
 // player are served from $FIXTURES_DIR, default "test/fixtures".
+//
+// /ui/ws is a websocket that keeps the page's views live: the page sends
+// {"learner": id} and gets that learner's enrollments now and after every
+// /ui call that may have changed them.
 func Register(r *mux.Router, svc Service) {
-	h := handlers{svc: svc}
+	h := handlers{svc: svc, live: newHub(svc)}
 	fixtures := os.Getenv("FIXTURES_DIR")
 	if fixtures == "" {
 		fixtures = "test/fixtures"
@@ -38,16 +40,20 @@ func Register(r *mux.Router, svc Service) {
 
 	ui := r.PathPrefix("/ui").Subrouter()
 	ui.HandleFunc("/paths", h.listPaths).Methods("GET")
-	ui.HandleFunc("/paths/{key}", h.upsertPath).Methods("PUT")
+	ui.HandleFunc("/paths/{key}", h.upsertPath).Methods("POST")
 	ui.HandleFunc("/learners/{learner}/enrollments", h.listEnrollments).Methods("GET")
 	ui.HandleFunc("/learners/{learner}/enrollments", h.enroll).Methods("POST")
 	ui.HandleFunc("/enrollments/{id}", h.getEnrollment).Methods("GET")
 	ui.HandleFunc("/enrollments/{id}/unenroll", h.unenroll).Methods("POST")
 	ui.HandleFunc("/ingest", h.ingest).Methods("POST")
+	ui.HandleFunc("/ws", h.live.serve).Methods("GET")
 	ui.PathPrefix("/fixtures/").Handler(http.StripPrefix("/ui/fixtures/", fixtureServer(fixtures))).Methods("GET")
 }
 
-type handlers struct{ svc Service }
+type handlers struct {
+	svc  Service
+	live *hub
+}
 
 func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
@@ -87,9 +93,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // verbatim (e.g. the S9 rejections), so the status code is advisory only.
 func writeErr(w http.ResponseWriter, err error) {
 	status := http.StatusUnprocessableEntity
-	if errors.Is(err, ErrNotImplemented) {
-		status = http.StatusNotImplemented
-	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
 
@@ -118,7 +121,7 @@ func (h handlers) listPaths(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]pathJSON, len(paths))
 	for i, p := range paths {
-		out[i] = pathJSON{Key: string(p.Key), Name: p.Name, Lessons: make([]string, len(p.Lessons)), Status: statusText(p.Status)}
+		out[i] = pathJSON{Key: string(p.Key), Name: p.Name, Lessons: make([]string, len(p.Lessons)), Status: string(p.Status)}
 		for j, l := range p.Lessons {
 			out[i].Lessons[j] = string(l)
 		}
@@ -132,39 +135,25 @@ func (h handlers) upsertPath(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	p := enrollments.Path{Key: enrollments.PathKey(mux.Vars(r)["key"]), Name: in.Name}
+	p := Path{Key: PathKey(mux.Vars(r)["key"]), Name: in.Name}
 	for _, l := range in.Lessons {
 		if l = strings.TrimSpace(l); l != "" {
-			p.Lessons = append(p.Lessons, enrollments.LessonKey(l))
+			p.Lessons = append(p.Lessons, LessonKey(l))
 		}
 	}
-	switch in.Status {
-	case "active":
-		p.Status = enrollments.Active
-	case "retired":
-		p.Status = enrollments.Retired
-	}
+	p.Status = PathStatus(in.Status)
 	if err := h.svc.UpsertPath(r.Context(), p); err != nil {
 		writeErr(w, err)
 		return
 	}
+	h.live.changedAll() // a path change can change any learner's progress
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func statusText(s enrollments.PathStatus) string {
-	switch s {
-	case enrollments.Active:
-		return "active"
-	case enrollments.Retired:
-		return "retired"
-	}
-	return "undefined"
 }
 
 // ---- enrollments ----
 
 func (h handlers) listEnrollments(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.ListLearnerEnrollments(r.Context(), enrollments.LearnerID(mux.Vars(r)["learner"]))
+	list, err := h.svc.ListLearnerEnrollments(r.Context(), LearnerID(mux.Vars(r)["learner"]))
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -190,17 +179,18 @@ func (h handlers) enroll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e, err := h.svc.Enroll(r.Context(), EnrollRequest{
-		LearnerID:    enrollments.LearnerID(mux.Vars(r)["learner"]),
-		PathKey:      enrollments.PathKey(in.PathKey),
+		LearnerID:    LearnerID(mux.Vars(r)["learner"]),
+		PathKey:      PathKey(in.PathKey),
 		Source:       in.Source,
 		AssignmentID: strings.TrimSpace(in.AssignmentID),
 		CreditDays:   in.CreditDays,
-		EnrolledAt:   enrollments.DateString(strings.TrimSpace(in.EnrolledAt)),
+		EnrolledAt:   DateString(strings.TrimSpace(in.EnrolledAt)),
 	})
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
+	h.live.changed(e.LearnerID)
 	writeJSON(w, http.StatusCreated, e)
 }
 
@@ -221,11 +211,21 @@ func (h handlers) unenroll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	id := mux.Vars(r)["id"]
-	if err := h.svc.Unenroll(r.Context(), id, enrollments.DateString(strings.TrimSpace(in.UnenrolledAt))); err != nil {
+	// The URL names the enrollment; Unenroll wants its learner and path.
+	e, err := h.svc.GetEnrollment(r.Context(), mux.Vars(r)["id"])
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
+	if err := h.svc.Unenroll(r.Context(), UnenrollRequest{
+		LearnerID:    LearnerID(e.LearnerID),
+		PathKey:      PathKey(e.PathKey),
+		UnenrolledAt: DateString(strings.TrimSpace(in.UnenrolledAt)),
+	}); err != nil {
+		writeErr(w, err)
+		return
+	}
+	h.live.changed(e.LearnerID)
 	h.getEnrollment(w, r)
 }
 
@@ -245,6 +245,11 @@ func (h handlers) ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	results, err := h.svc.Ingest(r.Context(), events)
+	learners := make([]string, len(events))
+	for i, e := range events {
+		learners[i] = string(e.LearnerID)
+	}
+	h.live.changed(learners...) // also on error: earlier events may be stored
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -252,17 +257,17 @@ func (h handlers) ingest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, results)
 }
 
-func decodeEvents(raw json.RawMessage) ([]enrollments.LessonEvent, error) {
+func decodeEvents(raw json.RawMessage) ([]LessonEvent, error) {
 	if trimmed := bytes.TrimSpace(raw); len(trimmed) > 0 && trimmed[0] == '[' {
-		var evs []enrollments.LessonEvent
+		var evs []LessonEvent
 		if err := json.Unmarshal(trimmed, &evs); err != nil {
 			return nil, fmt.Errorf("invalid events: %w", err)
 		}
 		return evs, nil
 	}
-	var ev enrollments.LessonEvent
+	var ev LessonEvent
 	if err := json.Unmarshal(raw, &ev); err != nil {
 		return nil, fmt.Errorf("invalid event: %w", err)
 	}
-	return []enrollments.LessonEvent{ev}, nil
+	return []LessonEvent{ev}, nil
 }

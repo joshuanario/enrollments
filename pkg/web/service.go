@@ -4,31 +4,34 @@ package web
 
 import (
 	"context"
-	"errors"
-
-	"github.com/joshuanario/enrollments/pkg/enrollments"
 )
 
 // Service is the boundary the UI calls.
 type Service interface {
-	UpsertPath(ctx context.Context, p enrollments.Path) error
-	ListPaths(ctx context.Context) ([]enrollments.Path, error)
+	UpsertPath(ctx context.Context, p Path) error
+	ListPaths(ctx context.Context) ([]Path, error)
 	Enroll(ctx context.Context, req EnrollRequest) (EnrollmentView, error)
-	// Unenroll with at == "" means now.
-	Unenroll(ctx context.Context, id string, at enrollments.DateString) error
+	Unenroll(ctx context.Context, req UnenrollRequest) error
 	GetEnrollment(ctx context.Context, id string) (EnrollmentView, error)
-	ListLearnerEnrollments(ctx context.Context, learner enrollments.LearnerID) ([]EnrollmentView, error)
-	Ingest(ctx context.Context, events []enrollments.LessonEvent) ([]IngestResultView, error)
+	ListLearnerEnrollments(ctx context.Context, learner LearnerID) ([]EnrollmentView, error)
+	Ingest(ctx context.Context, events []LessonEvent) ([]IngestResultView, error)
 }
 
 // EnrollRequest is what the enroll form submits. Empty EnrolledAt means now.
 type EnrollRequest struct {
-	LearnerID    enrollments.LearnerID
-	PathKey      enrollments.PathKey
+	LearnerID    LearnerID
+	PathKey      PathKey
 	Source       string // "self" | "assigned"
 	AssignmentID string
 	CreditDays   *int
-	EnrolledAt   enrollments.DateString
+	EnrolledAt   DateString
+}
+
+// UnenrollRequest is what the unenroll form submits. Empty UnenrolledAt means now.
+type UnenrollRequest struct {
+	LearnerID    LearnerID
+	PathKey      PathKey
+	UnenrolledAt DateString
 }
 
 // EnrollmentView is what the UI renders. Timestamps are RFC 3339 UTC
@@ -40,17 +43,17 @@ type EnrollmentView struct {
 	Source       string               `json:"source"`
 	AssignmentID string               `json:"assignment_id,omitempty"`
 	CreditDays   *int                 `json:"credit_days"`
-	EnrolledAt   string               `json:"enrolled_at"`
-	CompletedAt  string               `json:"completed_at,omitempty"`
-	UnenrolledAt string               `json:"unenrolled_at,omitempty"`
+	EnrolledAt   DateString           `json:"enrolled_at"`
+	CompletedAt  DateString           `json:"completed_at,omitempty"`
+	UnenrolledAt DateString           `json:"unenrolled_at,omitempty"`
 	Lessons      []LessonProgressView `json:"lessons"`
 }
 
 type LessonProgressView struct {
-	LessonKey   string `json:"lesson_key"`
-	StartedAt   string `json:"started_at,omitempty"`
-	CompletedAt string `json:"completed_at,omitempty"`
-	Credited    bool   `json:"credited"`
+	LessonKey   string     `json:"lesson_key"`
+	StartedAt   DateString `json:"started_at,omitempty"`
+	CompletedAt DateString `json:"completed_at,omitempty"`
+	Credited    bool       `json:"credited"`
 }
 
 // IngestResultView reports what happened to one submitted event.
@@ -59,5 +62,3 @@ type IngestResultView struct {
 	Accepted bool   `json:"accepted"`
 	Reason   string `json:"reason,omitempty"` // e.g. "duplicate", "invalid type"
 }
-
-var ErrNotImplemented = errors.New("not implemented yet") //TODO rm this

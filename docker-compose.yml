@@ -19,6 +19,8 @@ services:
     build: .
     environment:
       DATABASE_URL: postgres://enrollments:enrollments@db:5432/enrollments?sslmode=disable
+      # Upsert the "setup" paths from test/fixtures/scenarios.json on start (skips existing ones).
+      SEED_SETUP: "true"
     ports:
       - "8080:8080"
     depends_on:

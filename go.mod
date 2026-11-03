@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/gorilla/mux v1.8.1
+	github.com/gorilla/websocket v1.5.3
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )

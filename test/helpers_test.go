@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/joshuanario/enrollments/pkg/enrollments"
 	"github.com/joshuanario/enrollments/pkg/operations"
 	"github.com/joshuanario/enrollments/pkg/store"
 	"github.com/joshuanario/enrollments/pkg/web"
@@ -18,9 +17,9 @@ import (
 
 // Timestamps shared by several scenarios.
 const (
-	aliceFirstEnrolledAt  enrollments.DateString = "2026-03-01T08:00:00Z"
-	aliceSecondEnrolledAt enrollments.DateString = "2026-03-12T08:00:00Z"
-	assignedAt            enrollments.DateString = "2026-03-01T08:00:00Z"
+	aliceFirstEnrolledAt  web.DateString = "2026-03-01T08:00:00Z"
+	aliceSecondEnrolledAt web.DateString = "2026-03-12T08:00:00Z"
+	assignedAt            web.DateString = "2026-03-01T08:00:00Z"
 )
 
 // ---- system under test ----
@@ -36,14 +35,15 @@ func newSUT(t *testing.T) (operations.OperationsService, context.Context) {
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { s.Close() })
-	return operations.NewOperationsService(s), ctx
+	ss := operations.FractionalIndexing // same default as main's -sorting flag
+	return operations.NewOperationsService(s, &ss), ctx
 }
 
 // ---- fixtures ----
 
 type fixtureEvent struct {
 	Scenario string `json:"scenario"`
-	enrollments.LessonEvent
+	web.LessonEvent
 }
 
 type fixturePath struct {
@@ -67,11 +67,11 @@ func loadFixture(t *testing.T, name string, v any) {
 
 // events returns the fixture events with the given ids, taking each from the
 // copy tagged with scenario (event ids repeat across scenarios, e.g. S2, S11).
-func events(t *testing.T, scenario string, ids ...string) []enrollments.LessonEvent {
+func events(t *testing.T, scenario string, ids ...string) []web.LessonEvent {
 	t.Helper()
 	var all []fixtureEvent
 	loadFixture(t, "events.json", &all)
-	out := make([]enrollments.LessonEvent, 0, len(ids))
+	out := make([]web.LessonEvent, 0, len(ids))
 	for _, id := range ids {
 		found := false
 		for _, e := range all {
@@ -89,7 +89,7 @@ func events(t *testing.T, scenario string, ids ...string) []enrollments.LessonEv
 }
 
 // path returns the version of a path fixture tagged with scenario.
-func path(t *testing.T, scenario, key string) enrollments.Path {
+func path(t *testing.T, scenario, key string) web.Path {
 	t.Helper()
 	var all []fixturePath
 	loadFixture(t, "paths.json", &all)
@@ -97,25 +97,25 @@ func path(t *testing.T, scenario, key string) enrollments.Path {
 		if p.Scenario != scenario || p.Key != key {
 			continue
 		}
-		out := enrollments.Path{Key: enrollments.PathKey(p.Key), Name: p.Name}
+		out := web.Path{Key: web.PathKey(p.Key), Name: p.Name}
 		for _, l := range p.Lessons {
-			out.Lessons = append(out.Lessons, enrollments.LessonKey(l))
+			out.Lessons = append(out.Lessons, web.LessonKey(l))
 		}
 		switch p.Status {
 		case "active":
-			out.Status = enrollments.Active
+			out.Status = web.PathActive
 		case "retired":
-			out.Status = enrollments.Retired
+			out.Status = web.PathRetired
 		}
 		return out
 	}
 	t.Fatalf("fixture path %s (scenario %s) not found", key, scenario)
-	return enrollments.Path{}
+	return web.Path{}
 }
 
 // ---- arrange helpers (fail the test immediately on error) ----
 
-func mustUpsertPaths(t *testing.T, sut operations.OperationsService, ctx context.Context, paths ...enrollments.Path) {
+func mustUpsertPaths(t *testing.T, sut operations.OperationsService, ctx context.Context, paths ...web.Path) {
 	t.Helper()
 	for _, p := range paths {
 		if err := sut.UpsertPath(ctx, p); err != nil {
@@ -134,10 +134,10 @@ func mustSetupPaths(t *testing.T, sut operations.OperationsService, ctx context.
 }
 
 // mustIngest sends each event in its own ingest call, in the order given.
-func mustIngest(t *testing.T, sut operations.OperationsService, ctx context.Context, evs ...enrollments.LessonEvent) {
+func mustIngest(t *testing.T, sut operations.OperationsService, ctx context.Context, evs ...web.LessonEvent) {
 	t.Helper()
 	for _, e := range evs {
-		if _, err := sut.Ingest(ctx, []enrollments.LessonEvent{e}); err != nil {
+		if _, err := sut.Ingest(ctx, []web.LessonEvent{e}); err != nil {
 			t.Fatalf("arrange: ingest %s: %v", e.EventID, err)
 		}
 	}
@@ -164,11 +164,11 @@ func mustGet(t *testing.T, sut operations.OperationsService, ctx context.Context
 	return e
 }
 
-func selfEnroll(learner enrollments.LearnerID, pathKey enrollments.PathKey, at enrollments.DateString) web.EnrollRequest {
+func selfEnroll(learner web.LearnerID, pathKey web.PathKey, at web.DateString) web.EnrollRequest {
 	return web.EnrollRequest{LearnerID: learner, PathKey: pathKey, Source: "self", EnrolledAt: at}
 }
 
-func assign(learner enrollments.LearnerID, creditDays *int) web.EnrollRequest {
+func assign(learner web.LearnerID, creditDays *int) web.EnrollRequest {
 	return web.EnrollRequest{LearnerID: learner, PathKey: "web-basics", Source: "assigned", AssignmentID: "asg-100", CreditDays: creditDays, EnrolledAt: assignedAt}
 }
 
@@ -206,7 +206,7 @@ func assertProgress(t *testing.T, e web.EnrollmentView, wantDone, wantTotal int)
 
 func assertCompletedAt(t *testing.T, e web.EnrollmentView, want string) {
 	t.Helper()
-	if e.CompletedAt != want {
+	if string(e.CompletedAt) != want {
 		t.Errorf("enrollment completed_at = %q, want %q", e.CompletedAt, want)
 	}
 }
@@ -218,7 +218,7 @@ func assertLessonComplete(t *testing.T, e web.EnrollmentView, key, wantCompleted
 		t.Errorf("lesson %s: want complete, got incomplete", key)
 		return
 	}
-	if wantCompletedAt != "" && l.CompletedAt != wantCompletedAt {
+	if wantCompletedAt != "" && string(l.CompletedAt) != wantCompletedAt {
 		t.Errorf("lesson %s: completed_at = %q, want %q", key, l.CompletedAt, wantCompletedAt)
 	}
 	if l.Credited != wantCredited {

@@ -2,7 +2,7 @@ package store
 
 import "time"
 
-// PathRow is one row per path. The ordered lesson list lives in path_lessons.
+// PathRow is one row per path. Its lessons are LessonRows with this PathKey.
 type PathRow struct {
 	Key       string `gorm:"primaryKey"`
 	Name      string `gorm:"not null"`
@@ -11,16 +11,6 @@ type PathRow struct {
 }
 
 func (PathRow) TableName() string { return "paths" }
-
-// PathLessonRow holds one lesson of a path at a given position (0-based).
-// The lesson_key index answers "which paths contain lesson X".
-type PathLessonRow struct {
-	PathKey   string `gorm:"primaryKey"`
-	Position  int    `gorm:"primaryKey"`
-	LessonKey string `gorm:"not null;index"`
-}
-
-func (PathLessonRow) TableName() string { return "path_lessons" }
 
 // EnrollmentRow mirrors the Enrollment fields in ASSIGNMENT.md.
 //
@@ -46,15 +36,19 @@ func (EnrollmentRow) TableName() string { return "enrollments" }
 
 type LessonRow struct {
 	ID        int64  `gorm:"primaryKey"`
-	LearnerID string `gorm:"not null;uniqueIndex:idx_uq_key, index:idx_learner_lesson"`
-	LessonKey string `gorm:"not null;index:idx_learner_lesson"`
+	LearnerID string `gorm:"not null;uniqueIndex:idx_uq_key;index:idx_learner_lesson"`
+	LessonKey string `gorm:"not null;uniqueIndex:idx_uq_key;index:idx_learner_lesson"`
 	Status    string `gorm:"not null"`
+
+	StartedAt   time.Time `gorm:"not null"`
+	CompletedAt *time.Time
+	Credited    bool `gorm:"not null;default:false"`
 
 	PathKey string   `gorm:"not null;index"`
 	Path    *PathRow `gorm:"foreignKey:PathKey;references:Key;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;"`
 
 	// NextLesson/NextId are attributes used for adjacency list implementation of an ordered list
-	NextId     *uint
+	NextId     *int64
 	NextLesson *LessonRow `gorm:"foreignKey:NextId;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 
 	//Order is used for integer position column implementation of an ordered list
@@ -69,6 +63,7 @@ func (LessonRow) TableName() string { return "lessons" }
 type EventRow struct {
 	ID         int64     `gorm:"primaryKey"`
 	EventID    string    `gorm:"not null;uniqueIndex"`
+	LearnerID  string    `gorm:"not null;index"`
 	LessonKey  string    `gorm:"not null;index"`
 	Type       string    `gorm:"not null"`
 	OccurredAt time.Time `gorm:"not null"`

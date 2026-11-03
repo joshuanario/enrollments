@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/joshuanario/enrollments/pkg/enrollments"
 	"github.com/joshuanario/enrollments/pkg/operations"
 	"github.com/joshuanario/enrollments/pkg/web"
 )
@@ -143,7 +142,7 @@ func TestS3_OutOfOrderDelivery(t *testing.T) {
 func TestS4_CreditWindowOnAssignedEnrollments(t *testing.T) {
 	cases := []struct {
 		name       string
-		learner    enrollments.LearnerID
+		learner    web.LearnerID
 		creditDays *int
 		wantL1     bool
 	}{
@@ -268,7 +267,7 @@ func TestS8_ReEnrollAfterUnenroll(t *testing.T) {
 	first := arrangeAliceS5(t, sut, ctx)
 
 	// Act
-	errUnenroll := sut.Unenroll(ctx, first.ID, "2026-03-11T08:00:00Z")
+	errUnenroll := sut.Unenroll(ctx, web.UnenrollRequest{LearnerID: web.LearnerID(first.LearnerID), PathKey: web.PathKey(first.PathKey), UnenrolledAt: "2026-03-11T08:00:00Z"})
 	second, errEnroll := sut.Enroll(ctx, selfEnroll("alice", "web-basics", aliceSecondEnrolledAt))
 
 	// Assert
@@ -421,7 +420,7 @@ func TestS14_UnenrollAfterCompletion(t *testing.T) {
 	gina, _ := arrangeHanaS7(t, sut, ctx)
 
 	// Act
-	err := sut.Unenroll(ctx, gina.ID, "2026-03-20T08:00:00Z")
+	err := sut.Unenroll(ctx, web.UnenrollRequest{LearnerID: web.LearnerID(gina.LearnerID), PathKey: web.PathKey(gina.PathKey), UnenrolledAt: "2026-03-20T08:00:00Z"})
 
 	// Assert
 	if err != nil {
